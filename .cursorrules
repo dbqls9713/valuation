@@ -1,0 +1,40 @@
+
+# Rules
+
+# General rules
+
+## 0. Work process
+
+- Do not implement overly complicated scripts. Start simple, and grow big.
+
+## 1. Commentation
+
+- Do not add comments unless they describe:
+  - Class field names
+  - Global variables
+  - Public functions
+  - Types
+  - Classes
+- Do not use comments to describe what the logic does.
+- Use comments only when the reason is not obvious.
+
+## 2. Unittest
+
+- Keep setUp stage simple.
+  - Initialize only mocks and the UUT (Unit Under Test) in setUp.
+- Minimize defining and using util functions for test.
+- Minimize the declaration of variables.
+  - Especially for data, don't reuse them.
+- Leave empty lines only for meaningful places, like
+  - Between arrange/act/assert steps
+  - Between initialization of mock instances and setting for mocked behaviors
+
+# Python
+
+- Use `'` as the default quote delimiter.
+- Always include a script-level comment at the top describing what the script does.
+- Avoid unnecessary logs. Keep only success/failure, warnings, and errors.
+- Use type hints. Code will be checked with `mypy`. Avoid `Any`.
+- Use classes for structured data instead of plain dicts.
+- Split logic into functions and classes for clarity.
+  Ensure the `main` function gives a clear overview of the procedure.

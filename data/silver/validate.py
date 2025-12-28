@@ -1,0 +1,353 @@
+"""
+validate.py
+
+Validates Silver outputs:
+- SEC facts_long_minimal + metrics_quarterly
+- Stooq prices_daily
+
+Checks:
+1) Schema + types
+2) Key uniqueness
+3) filed >= end
+4) YTD->Quarter identity vs facts_long (core correctness)
+5) TTM correctness
+6) CAPEX abs convention (>=0)
+7) Optional: manual spotcheck fixture file
+
+Run:
+  python -m data.silver.validate
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List
+
+import pandas as pd
+
+from data.silver.metric_specs import METRIC_SPECS
+
+SEC_FACTS_PATH = Path("data/silver/sec/facts_long.parquet")
+SEC_METRICS_Q_PATH = Path("data/silver/sec/metrics_quarterly.parquet")
+PRICES_PATH = Path("data/silver/stooq/prices_daily.parquet")
+
+MANUAL_FIXTURE_PATH = Path("data/validation/sec_manual_spotcheck.csv")
+
+
+@dataclass(frozen=True)
+class CheckResult:
+  name: str
+  ok: bool
+  details: str
+
+
+def _require_columns(df: pd.DataFrame, cols: List[str], name: str) -> None:
+  missing = [c for c in cols if c not in df.columns]
+  if missing:
+    raise ValueError(f"[{name}] missing columns: {missing}")
+
+
+def _assert_unique(df: pd.DataFrame, key_cols: List[str],
+                   name: str) -> CheckResult:
+  dup = df.duplicated(key_cols, keep=False)
+  if dup.any():
+    n = int(dup.sum())
+    sample = df.loc[dup, key_cols].head(5).to_dict(orient="records")
+    return CheckResult(
+        name, False,
+        f"Found {n} duplicate rows by key {key_cols}. Sample: {sample}")
+  return CheckResult(name, True, f"Unique by {key_cols}")
+
+
+def _assert_filed_ge_end(df: pd.DataFrame, name: str) -> CheckResult:
+  bad = df["filed"] < df["end"]
+  if bad.any():
+    n = int(bad.sum())
+    sample = df.loc[bad,
+                    ["cik10", "metric", "end", "filed", "fp"]].head(5).to_dict(
+                        orient="records")
+    return CheckResult(name, False,
+                       f"{n} rows have filed < end. Sample: {sample}")
+  return CheckResult(name, True, "All rows satisfy filed >= end")
+
+
+def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
+                        tol: float) -> CheckResult:
+  """
+    Compare facts_long YTD values (val) with reconstructed YTD from
+    quarterly q_val.
+
+    Uses fiscal_year (not fy) for grouping to avoid comparative period
+    mixing.
+
+    We expect facts_long to contain fp in {Q1,Q2,Q3,FY} for cashflow
+    YTD values. metrics_quarterly contains fp in {Q1,Q2,Q3,Q4}.
+    """
+  if ("fiscal_year" not in facts.columns or
+      "fiscal_year" not in metrics_q.columns):
+    return CheckResult(
+        "ytd_identity", False,
+        "Missing fiscal_year column in facts_long or metrics_quarterly")
+
+  f = facts[["cik10", "metric", "end", "fiscal_year", "fp", "val"]].copy()
+  m = metrics_q[["cik10", "metric", "end", "fiscal_year", "fp", "q_val"]].copy()
+
+  f["fp"] = f["fp"].astype(str)
+  m["fp"] = m["fp"].astype(str)
+
+  ytd_metrics = [m for m, s in METRIC_SPECS.items() if s.get("is_ytd", False)]
+  f_ytd = f[f["metric"].isin(ytd_metrics)].copy()
+
+  for metric in ytd_metrics:
+    if METRIC_SPECS[metric].get("abs", False):
+      f_ytd.loc[f_ytd["metric"] == metric,
+                "val"] = f_ytd.loc[f_ytd["metric"] == metric, "val"].abs()
+
+  mq = m.copy()
+  mq = mq[mq["fp"].isin(["Q1", "Q2", "Q3", "Q4"])]
+
+  pivot = (mq.pivot_table(
+      index=["cik10", "metric", "fiscal_year"],
+      columns="fp",
+      values="q_val",
+      aggfunc="last",
+  ).reset_index())
+
+  merged = f_ytd.merge(pivot, on=["cik10", "metric", "fiscal_year"], how="left")
+
+  def recon_ytd(row: pd.Series) -> float:
+    q1 = row.get("Q1")
+    q2 = row.get("Q2")
+    q3 = row.get("Q3")
+    q4 = row.get("Q4")
+
+    fp = row["fp"]
+    if fp == "Q1":
+      return float(q1) if pd.notna(q1) else float("nan")
+    if fp == "Q2":
+      return float(q1 + q2) if pd.notna(q1) and pd.notna(q2) else float("nan")
+    if fp == "Q3":
+      return float(q1 + q2 + q3) if pd.notna(q1) and pd.notna(q2) and pd.notna(
+          q3) else float("nan")
+    if fp == "FY":
+      return float(q1 + q2 + q3 + q4) if pd.notna(q1) and pd.notna(
+          q2) and pd.notna(q3) and pd.notna(q4) else float("nan")
+    return float("nan")
+
+  merged["recon"] = merged.apply(recon_ytd, axis=1)
+
+  comp = merged[pd.notna(merged["recon"])].copy()
+  if comp.empty:
+    return CheckResult("ytd_identity", False,
+                       "No comparable rows found (missing quarters/Q4).")
+
+  comp["diff"] = (comp["val"] - comp["recon"]).abs()
+  bad = comp["diff"] > tol
+
+  if bad.any():
+    n = int(bad.sum())
+    sample = comp.loc[
+        bad,
+        ["cik10", "metric", "fiscal_year", "fp", "end", "val", "recon", "diff"
+        ]].head(10)
+    return CheckResult(
+        "ytd_identity",
+        False,
+        f"{n}/{len(comp)} rows fail YTD identity (tol={tol}). "
+        f"Sample:\n{sample.to_string(index=False)}",
+    )
+
+  return CheckResult(
+      "ytd_identity", True,
+      f"All comparable rows pass YTD identity (tol={tol}). "
+      f"Compared rows={len(comp)}")
+
+
+def _check_ttm(metrics_q: pd.DataFrame, tol: float) -> CheckResult:
+  m = metrics_q.sort_values(["cik10", "metric", "end"]).copy()
+  # recompute
+  recomputed = (m.groupby(["cik10", "metric"
+                          ])["q_val"].rolling(4).sum().reset_index(level=[0, 1],
+                                                                   drop=True))
+  m["ttm_recomputed"] = recomputed
+  # only compare where both exist
+  comp = m[pd.notna(m["ttm_val"]) & pd.notna(m["ttm_recomputed"])].copy()
+  if comp.empty:
+    return CheckResult("ttm_check", False,
+                       "No comparable TTM rows found (need >=4 quarters).")
+
+  comp["diff"] = (comp["ttm_val"] - comp["ttm_recomputed"]).abs()
+  bad = comp["diff"] > tol
+  if bad.any():
+    n = int(bad.sum())
+    sample = comp.loc[
+        bad,
+        ["cik10", "metric", "end", "ttm_val", "ttm_recomputed", "diff"]].head(
+            10)
+    return CheckResult(
+        "ttm_check", False, f"{n}/{len(comp)} rows fail TTM check (tol={tol}). "
+        f"Sample:\n{sample.to_string(index=False)}")
+  return CheckResult(
+      "ttm_check", True, f"All comparable rows pass TTM check (tol={tol}). "
+      f"Compared rows={len(comp)}")
+
+
+def _check_capex_abs(metrics_q: pd.DataFrame, eps: float) -> CheckResult:
+  cap = metrics_q[metrics_q["metric"] == "CAPEX"].copy()
+  if cap.empty:
+    return CheckResult("capex_abs", True, "No CAPEX rows (skipped).")
+  bad = cap["q_val"] < -eps
+  if bad.any():
+    n = int(bad.sum())
+    sample = cap.loc[bad, ["cik10", "end", "q_val"]].head(10).to_dict(
+        orient="records")
+    return CheckResult(
+        "capex_abs", False,
+        f"{n} CAPEX rows have q_val < 0 (eps={eps}). Sample: {sample}")
+  return CheckResult("capex_abs", True, f"All CAPEX q_val >= -{eps}")
+
+
+def _check_prices(prices: pd.DataFrame) -> List[CheckResult]:
+  results: List[CheckResult] = []
+  _require_columns(prices,
+                   ["symbol", "date", "open", "high", "low", "close", "volume"],
+                   "prices_daily")
+
+  results.append(
+      _assert_unique(prices, ["symbol", "date"], "prices_unique_symbol_date"))
+
+  # close should be positive
+  bad = prices["close"] <= 0
+  if bad.any():
+    n = int(bad.sum())
+    sample = prices.loc[bad, ["symbol", "date", "close"]].head(10).to_dict(
+        orient="records")
+    results.append(
+        CheckResult("prices_positive_close", False,
+                    f"{n} rows have close <= 0. Sample: {sample}"))
+  else:
+    results.append(CheckResult("prices_positive_close", True, "All close > 0"))
+
+  return results
+
+
+def _manual_spotcheck(metrics_q: pd.DataFrame, fixture_path: Path,
+                      tol: float) -> CheckResult:
+  """
+    Fixture CSV schema:
+      cik10, metric, end, expected_val
+    optional: note, source_url
+    """
+  fx = pd.read_csv(fixture_path)
+  _require_columns(fx, ["cik10", "metric", "end", "expected_val"],
+                   "manual_fixture")
+  fx["end"] = pd.to_datetime(fx["end"])
+
+  m = metrics_q.copy()
+  m["end"] = pd.to_datetime(m["end"])
+
+  # For manual checks, compare against YTD or quarterly?
+  # We'll interpret expected_val as quarterly q_val by default.
+  merged = fx.merge(m, on=["cik10", "metric", "end"], how="left")
+  missing = merged["q_val"].isna()
+  if missing.any():
+    n = int(missing.sum())
+    sample = merged.loc[missing, ["cik10", "metric", "end"]].head(10).to_dict(
+        orient="records")
+    return CheckResult(
+        "manual_spotcheck", False,
+        f"{n} fixture rows not found in metrics_quarterly. Sample: {sample}")
+
+  merged["diff"] = (merged["q_val"] - merged["expected_val"]).abs()
+  bad = merged["diff"] > tol
+  if bad.any():
+    n = int(bad.sum())
+    sample = merged.loc[
+        bad,
+        ["cik10", "metric", "end", "expected_val", "q_val", "diff"]].head(10)
+    return CheckResult(
+        "manual_spotcheck",
+        False,
+        f"{n}/{len(merged)} fixture rows mismatch (tol={tol}). "
+        f"Sample:\n{sample.to_string(index=False)}",
+    )
+  return CheckResult("manual_spotcheck", True,
+                     f"All fixture rows match (tol={tol}). Rows={len(merged)}")
+
+
+def main() -> None:
+  ap = argparse.ArgumentParser()
+  ap.add_argument("--tol",
+                  type=float,
+                  default=1e-6,
+                  help="absolute tolerance for numeric checks")
+  ap.add_argument("--capex-eps",
+                  type=float,
+                  default=1e-9,
+                  help="epsilon for CAPEX >= 0 check")
+  ap.add_argument("--with-manual",
+                  action="store_true",
+                  help="run manual fixture spotcheck if fixture exists")
+  args = ap.parse_args()
+
+  facts = pd.read_parquet(SEC_FACTS_PATH)
+  metrics_q = pd.read_parquet(SEC_METRICS_Q_PATH)
+  prices = pd.read_parquet(
+      PRICES_PATH) if PRICES_PATH.exists() else pd.DataFrame()
+
+  results: List[CheckResult] = []
+
+  # --- SEC tables ---
+  _require_columns(
+      facts,
+      [
+          "cik10", "metric", "namespace", "tag", "unit", "end", "filed", "fy",
+          "fp", "form", "val"
+      ],
+      "facts_long",
+  )
+  _require_columns(
+      metrics_q,
+      [
+          "cik10", "metric", "end", "filed", "fy", "fp", "q_val", "ttm_val",
+          "tag"
+      ],
+      "metrics_quarterly",
+  )
+
+  results.append(
+      _assert_unique(facts, ["cik10", "metric", "end", "fy", "fp"],
+                     "facts_unique_period"))
+  results.append(
+      _assert_unique(metrics_q, ["cik10", "metric", "end", "fp"],
+                     "metrics_unique_period"))
+  results.append(_assert_filed_ge_end(facts, "facts_filed_ge_end"))
+  results.append(_assert_filed_ge_end(metrics_q, "metrics_filed_ge_end"))
+
+  results.append(_check_ytd_identity(facts, metrics_q, tol=float(args.tol)))
+  results.append(_check_ttm(metrics_q, tol=float(args.tol)))
+  results.append(_check_capex_abs(metrics_q, eps=float(args.capex_eps)))
+
+  # --- Prices ---
+  if not prices.empty:
+    results.extend(_check_prices(prices))
+
+  # --- Manual fixture (optional) ---
+  if args.with_manual and MANUAL_FIXTURE_PATH.exists():
+    results.append(
+        _manual_spotcheck(metrics_q, MANUAL_FIXTURE_PATH, tol=float(args.tol)))
+
+  # Print summary
+  ok = all(r.ok for r in results)
+  print("=== Silver Validation Summary ===")
+  for r in results:
+    status = "OK" if r.ok else "FAIL"
+    print(f"[{status}] {r.name}: {r.details}")
+  if not ok:
+    raise SystemExit(1)
+
+
+if __name__ == "__main__":
+  main()

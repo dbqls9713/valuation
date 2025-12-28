@@ -1,1 +1,5 @@
 venv
+**/*.pyc
+**/*.json
+**/*.parquet
+**/*.csv
