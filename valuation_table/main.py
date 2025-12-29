@@ -5,6 +5,7 @@ Simplified DCF valuation model and sensitivity table builder.
 import argparse
 from abc import ABC, abstractmethod
 from math import isfinite
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import pandas as pd
@@ -73,6 +74,110 @@ class MemoryGoogleAccountingRepository(AccountingRepository):
   def get_yearly_shares_count(self, company_code: str) -> Dict[int, int]:
     assert company_code == "GOOG", "Only Google is supported"
     return self.yearly_shares_count
+
+
+class GoldAccountingRepository(AccountingRepository):
+  """
+    Repository that reads from Gold layer valuation panel.
+
+    Loads data from data/gold/valuation_panel.parquet and provides
+    latest TTM values and historical shares count by fiscal year.
+    """
+
+  def __init__(self,
+               gold_panel_path: str = "data/gold/valuation_panel.parquet"):
+    """
+        Initialize repository with Gold panel data.
+
+        Args:
+            gold_panel_path: Path to valuation_panel.parquet file
+        """
+    self.panel_path = Path(gold_panel_path)
+    if not self.panel_path.exists():
+      raise FileNotFoundError(f"Gold panel not found: {self.panel_path}. "
+                              f"Run 'python -m data.gold.build' first.")
+    self.panel = pd.read_parquet(self.panel_path)
+    self.panel["end"] = pd.to_datetime(self.panel["end"])
+
+  def get_ttm_cfo(self, company_code: str) -> float:
+    """
+        Get latest TTM CFO for the company.
+
+        Args:
+            company_code: Ticker symbol (e.g., 'GOOGL', 'MSFT', 'META')
+
+        Returns:
+            Latest TTM CFO value
+
+        Raises:
+            ValueError: If ticker not found or no TTM data available
+        """
+    ticker_data = self.panel[self.panel["ticker"] == company_code]
+    if ticker_data.empty:
+      raise ValueError(f"Ticker {company_code} not found in Gold panel")
+
+    ticker_data = ticker_data.sort_values("end", ascending=False)
+    latest = ticker_data.iloc[0]
+
+    if pd.isna(latest["cfo_ttm"]):
+      raise ValueError(f"No TTM CFO data for {company_code}")
+
+    return float(latest["cfo_ttm"])
+
+  def get_ttm_capex(self, company_code: str) -> float:
+    """
+        Get latest TTM CAPEX for the company.
+
+        Args:
+            company_code: Ticker symbol (e.g., 'GOOGL', 'MSFT', 'META')
+
+        Returns:
+            Latest TTM CAPEX value (positive)
+
+        Raises:
+            ValueError: If ticker not found or no TTM data available
+        """
+    ticker_data = self.panel[self.panel["ticker"] == company_code]
+    if ticker_data.empty:
+      raise ValueError(f"Ticker {company_code} not found in Gold panel")
+
+    ticker_data = ticker_data.sort_values("end", ascending=False)
+    latest = ticker_data.iloc[0]
+
+    if pd.isna(latest["capex_ttm"]):
+      raise ValueError(f"No TTM CAPEX data for {company_code}")
+
+    return float(latest["capex_ttm"])
+
+  def get_yearly_shares_count(self, company_code: str) -> Dict[int, int]:
+    """
+        Get yearly shares count from quarterly data.
+
+        Uses most recent shares_q for each fiscal year.
+
+        Args:
+            company_code: Ticker symbol (e.g., 'GOOGL', 'MSFT', 'META')
+
+        Returns:
+            Dictionary mapping fiscal year to diluted shares count
+
+        Raises:
+            ValueError: If ticker not found or no shares data available
+        """
+    ticker_data = self.panel[self.panel["ticker"] == company_code]
+    if ticker_data.empty:
+      raise ValueError(f"Ticker {company_code} not found in Gold panel")
+
+    ticker_data = ticker_data[ticker_data["shares_q"].notna()].copy()
+    if ticker_data.empty:
+      raise ValueError(f"No shares data for {company_code}")
+
+    ticker_data["fiscal_year"] = ticker_data["end"].dt.year
+
+    yearly_shares = (ticker_data.sort_values("end").groupby("fiscal_year")
+                     ["shares_q"].last().to_dict())
+
+    return {int(year): int(shares) for year, shares in yearly_shares.items()}
 
 
 class DataPreprocessor:
@@ -359,6 +464,16 @@ class Runner:
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--company-code", type=str, required=True)
+  parser.add_argument(
+      "--data-source",
+      type=str,
+      choices=["memory", "gold"],
+      default="gold",
+      help="Data source: 'memory' (hardcoded) or 'gold' (panel)")
+  parser.add_argument("--gold-panel-path",
+                      type=str,
+                      default="data/gold/valuation_panel.parquet",
+                      help="Path to Gold panel parquet file")
   parser.add_argument("--min-initial-growth-rate",
                       type=float,
                       required=True,
@@ -379,7 +494,11 @@ if __name__ == "__main__":
   parser.add_argument("--forecast-years", type=int, default=10)
   args = parser.parse_args()
 
-  repository = MemoryGoogleAccountingRepository()
+  if args.data_source == "memory":
+    repository = MemoryGoogleAccountingRepository()
+  else:
+    repository = GoldAccountingRepository(args.gold_panel_path)
+
   preprocessor = DataPreprocessor()
   table_builder = SensitivityTableBuilder(
       args.min_initial_growth_rate,
