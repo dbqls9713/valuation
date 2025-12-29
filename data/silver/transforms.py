@@ -27,26 +27,27 @@ def _as_float(x: Any) -> Optional[float]:
   return v
 
 
-def pick_first_existing_tag(
+def pick_all_tags(
     companyfacts: Dict[str, Any],
     *,
     namespace: str,
     tags: List[str],
     unit: str,
-) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+) -> List[Tuple[str, List[Dict[str, Any]]]]:
   """
-    Return (chosen_tag, items) where items is the units[unit] list.
-    Chooses the first tag in 'tags' that exists and has items for that unit.
+    Return list of (tag, items) for all matching tags that exist.
+    Merges data from multiple tags to maximize coverage.
     """
   facts = companyfacts.get("facts", {})
   ns_obj = facts.get(namespace, {})
+  result = []
   for tag in tags:
     tag_obj = ns_obj.get(tag, {})
     units = tag_obj.get("units", {})
     items = units.get(unit, [])
     if isinstance(items, list) and len(items) > 0:
-      return tag, items
-  return None, []
+      result.append((tag, items))
+  return result
 
 
 def companyfacts_to_minimal_facts_long(
@@ -69,34 +70,37 @@ def companyfacts_to_minimal_facts_long(
     tags = list(spec["tags"])
     unit = spec["unit"]
 
-    tag, items = pick_first_existing_tag(companyfacts,
-                                         namespace=namespace,
-                                         tags=tags,
-                                         unit=unit)
-    chosen["chosen_tags"][metric] = tag
+    tag_items_pairs = pick_all_tags(companyfacts,
+                                    namespace=namespace,
+                                    tags=tags,
+                                    unit=unit)
 
-    if not tag or not items:
+    if not tag_items_pairs:
+      chosen["chosen_tags"][metric] = None
       continue
 
-    for it in items:
-      val = _as_float(it.get("val"))
-      if val is None:
-        continue
+    chosen["chosen_tags"][metric] = [tag for tag, _ in tag_items_pairs]
 
-      row = {
-          "cik10": cik10,
-          "metric": metric,
-          "namespace": namespace,
-          "tag": tag,
-          "unit": unit,
-          "end": it.get("end"),
-          "filed": it.get("filed"),
-          "fy": it.get("fy"),
-          "fp": it.get("fp"),
-          "form": it.get("form"),
-          "val": float(val),
-      }
-      rows.append(row)
+    for tag, items in tag_items_pairs:
+      for it in items:
+        val = _as_float(it.get("val"))
+        if val is None:
+          continue
+
+        row = {
+            "cik10": cik10,
+            "metric": metric,
+            "namespace": namespace,
+            "tag": tag,
+            "unit": unit,
+            "end": it.get("end"),
+            "filed": it.get("filed"),
+            "fy": it.get("fy"),
+            "fp": it.get("fp"),
+            "form": it.get("form"),
+            "val": float(val),
+        }
+        rows.append(row)
 
   df = pd.DataFrame(rows)
   if df.empty:
@@ -339,14 +343,14 @@ def ytd_to_quarter(
 def add_fiscal_year(df: pd.DataFrame,
                     companies_df: pd.DataFrame) -> pd.DataFrame:
   """
-    Add fiscal_year column based on company's fiscalYearEnd.
+    Add fiscal_year column based on company"s fiscalYearEnd.
 
     Args:
-        df: DataFrame with 'end' (datetime) and 'cik10' columns
-        companies_df: DataFrame with 'cik10' and 'fye_mmdd' columns
+        df: DataFrame with "end" (datetime) and "cik10" columns
+        companies_df: DataFrame with "cik10" and "fye_mmdd" columns
 
     Returns:
-        df with added 'fiscal_year' column
+        df with added "fiscal_year" column
 
     Logic:
         fiscal_year = end.year if end_mmdd <= fye_mmdd else end.year + 1

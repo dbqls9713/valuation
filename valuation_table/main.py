@@ -153,13 +153,15 @@ class GoldAccountingRepository(AccountingRepository):
     """
         Get yearly shares count from quarterly data.
 
-        Uses most recent shares_q for each fiscal year.
+        Uses most recent shares_q for each fiscal year. Automatically adjusts
+        for stock splits by detecting large changes in share count.
 
         Args:
             company_code: Ticker symbol (e.g., 'GOOGL', 'MSFT', 'META')
 
         Returns:
             Dictionary mapping fiscal year to diluted shares count
+            (adjusted for all stock splits)
 
         Raises:
             ValueError: If ticker not found or no shares data available
@@ -171,6 +173,30 @@ class GoldAccountingRepository(AccountingRepository):
     ticker_data = ticker_data[ticker_data["shares_q"].notna()].copy()
     if ticker_data.empty:
       raise ValueError(f"No shares data for {company_code}")
+
+    ticker_data = ticker_data.sort_values("end")
+
+    # Detect and adjust for ALL stock splits (iterate backwards)
+    ticker_data["shares_ratio"] = (ticker_data["shares_q"] /
+                                   ticker_data["shares_q"].shift(1))
+
+    # Identify all splits: ratio > 2 or < 0.5
+    splits = ticker_data[(ticker_data["shares_ratio"] > 2) |
+                         (ticker_data["shares_ratio"] < 0.5)].copy()
+
+    if not splits.empty:
+      # Process splits from most recent to oldest
+      for idx in splits.index[::-1]:
+        split_date = ticker_data.loc[idx, "end"]
+        split_ratio = ticker_data.loc[idx, "shares_ratio"]
+
+        # Adjust all shares before this split
+        mask = ticker_data["end"] < split_date
+        ticker_data.loc[mask, "shares_q"] *= split_ratio
+
+        # Recalculate ratios after adjustment
+        ticker_data["shares_ratio"] = (ticker_data["shares_q"] /
+                                       ticker_data["shares_q"].shift(1))
 
     ticker_data["fiscal_year"] = ticker_data["end"].dt.year
 

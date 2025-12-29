@@ -27,6 +27,8 @@ METRIC_SPECS = {
         "tags": [
             "WeightedAverageNumberOfDilutedSharesOutstanding",
             "WeightedAverageNumberOfSharesOutstandingDiluted",
+            "CommonStockSharesOutstanding",
+            "WeightedAverageNumberOfSharesOutstandingBasic",
         ],
         "unit": "shares",
         "is_ytd": False,
