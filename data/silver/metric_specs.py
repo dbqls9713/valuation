@@ -22,4 +22,14 @@ METRIC_SPECS = {
         "is_ytd": True,
         "abs": True,
     },
+    "SHARES": {
+        "namespace": "us-gaap",
+        "tags": [
+            "WeightedAverageNumberOfDilutedSharesOutstanding",
+            "WeightedAverageNumberOfSharesOutstandingDiluted",
+        ],
+        "unit": "shares",
+        "is_ytd": False,
+        "abs": False,
+    },
 }
