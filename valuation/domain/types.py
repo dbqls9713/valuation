@@ -122,21 +122,21 @@ class PreparedInputs:
   Attributes:
     oe0: Initial owner earnings (CFO - CAPEX)
     sh0: Current shares outstanding
-    buyback_rate_b: Annual share reduction rate
+    buyback_rate: Annual share reduction rate
     g0: Initial growth rate (first year in growth_path)
     g_terminal: Terminal growth rate (for Gordon Growth)
     growth_path: Yearly growth rates [g1, g2, ..., gN] from fade policy
     n_years: Number of explicit forecast years
-    discount_rate_r: Required return / discount rate
+    discount_rate: Required return / discount rate
   '''
   oe0: float
   sh0: float
-  buyback_rate_b: float
+  buyback_rate: float
   g0: float
   g_terminal: float
   growth_path: List[float]
   n_years: int
-  discount_rate_r: float
+  discount_rate: float
 
   @property
   def g_end(self) -> float:
@@ -184,10 +184,10 @@ class ValuationResult:
       result.update({
           'oe0': self.inputs.oe0,
           'sh0': self.inputs.sh0,
-          'buyback_rate': self.inputs.buyback_rate_b,
+          'buyback_rate': self.inputs.buyback_rate,
           'g0': self.inputs.g0,
           'g_terminal': self.inputs.g_terminal,
-          'discount_rate': self.inputs.discount_rate_r,
+          'discount_rate': self.inputs.discount_rate,
       })
     result.update(self.diag)
     return result

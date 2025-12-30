@@ -20,6 +20,7 @@ Usage:
 '''
 
 import argparse
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -34,6 +35,8 @@ from valuation.domain.types import (
 from valuation.engine.dcf import compute_intrinsic_value
 from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
+
+logger = logging.getLogger(__name__)
 
 
 def load_gold_panel(gold_path: Path) -> pd.DataFrame:
@@ -215,21 +218,21 @@ def run_valuation(
   inputs = PreparedInputs(
       oe0=oe0,
       sh0=sh0,
-      buyback_rate_b=shares_result.value,
+      buyback_rate=shares_result.value,
       g0=growth_result.value,
       g_terminal=terminal_result.value,
       growth_path=growth_path,
       n_years=config.n_years,
-      discount_rate_r=discount_result.value,
+      discount_rate=discount_result.value,
   )
 
   iv, pv_explicit, tv_component = compute_intrinsic_value(
       oe0=inputs.oe0,
       sh0=inputs.sh0,
-      buyback_rate=inputs.buyback_rate_b,
+      buyback_rate=inputs.buyback_rate,
       growth_path=inputs.growth_path,
       g_terminal=inputs.g_terminal,
-      discount_rate=inputs.discount_rate_r,
+      discount_rate=inputs.discount_rate,
   )
 
   market_slice = None
@@ -308,33 +311,40 @@ def main():
       silver_dir=args.silver_dir,
   )
 
-  print('=' * 70)
-  print(f'DCF Valuation - {args.ticker} as of {args.as_of}')
-  print(f'Scenario: {config.name}')
-  print('=' * 70)
+  separator = '=' * 70
+  logger.info('\n%s', separator)
+  logger.info('DCF Valuation - %s as of %s', args.ticker, args.as_of)
+  logger.info('Scenario: %s', config.name)
+  logger.info(separator)
 
   if result.inputs:
-    print('\nPrepared Inputs:')
-    print(f'  OE0: ${result.inputs.oe0:,.0f}')
-    print(f'  Shares: {result.inputs.sh0:,.0f}')
-    print(f'  Buyback Rate: {result.inputs.buyback_rate_b:.2%}')
-    print(f'  Initial Growth (g0): {result.inputs.g0:.2%}')
-    print(f'  Terminal Growth (gT): {result.inputs.g_terminal:.2%}')
-    print(f'  Discount Rate (r): {result.inputs.discount_rate_r:.2%}')
+    logger.info('\nPrepared Inputs:')
+    logger.info('  OE0: $%s', f'{result.inputs.oe0:,.0f}')
+    logger.info('  Shares: %s', f'{result.inputs.sh0:,.0f}')
+    logger.info('  Buyback Rate: %.2f%%', result.inputs.buyback_rate * 100)
+    logger.info('  Initial Growth (g0): %.2f%%', result.inputs.g0 * 100)
+    logger.info('  Terminal Growth (gT): %.2f%%',
+                result.inputs.g_terminal * 100)
+    logger.info('  Discount Rate (r): %.2f%%',
+                result.inputs.discount_rate * 100)
 
-  print('\nValuation Result:')
-  print(f'  Intrinsic Value: ${result.iv_per_share:.2f}')
-  print(f'  PV Explicit: ${result.pv_explicit:.2f}')
-  print(f'  TV Component: ${result.tv_component:.2f}')
+  logger.info('\nValuation Result:')
+  logger.info('  Intrinsic Value: $%.2f', result.iv_per_share)
+  logger.info('  PV Explicit: $%.2f', result.pv_explicit)
+  logger.info('  TV Component: $%.2f', result.tv_component)
 
   if result.market_price:
-    print('\nMarket Comparison:')
-    print(f'  Market Price: ${result.market_price:.2f}')
-    print(f'  Price/IV: {result.price_to_iv:.2%}')
-    print(f'  Margin of Safety: {result.margin_of_safety:.2%}')
+    logger.info('\nMarket Comparison:')
+    logger.info('  Market Price: $%.2f', result.market_price)
+    logger.info('  Price/IV: %.2f%%', result.price_to_iv * 100)
+    logger.info('  Margin of Safety: %.2f%%', result.margin_of_safety * 100)
 
-  print('=' * 70)
+  logger.info('%s\n', separator)
 
 
 if __name__ == '__main__':
+  logging.basicConfig(
+      level=logging.INFO,
+      format='%(message)s',
+  )
   main()
