@@ -210,13 +210,15 @@ def run_valuation(
   oe0 = data.latest_cfo_ttm - capex_result.value
   sh0 = data.latest_shares
 
+  growth_path = fade_result.value
+
   inputs = PreparedInputs(
       oe0=oe0,
       sh0=sh0,
       buyback_rate_b=shares_result.value,
       g0=growth_result.value,
       g_terminal=terminal_result.value,
-      g_end=fade_result.value,
+      growth_path=growth_path,
       n_years=config.n_years,
       discount_rate_r=discount_result.value,
   )
@@ -225,10 +227,8 @@ def run_valuation(
       oe0=inputs.oe0,
       sh0=inputs.sh0,
       buyback_rate=inputs.buyback_rate_b,
-      g0=inputs.g0,
-      g_end=inputs.g_end,
+      growth_path=inputs.growth_path,
       g_terminal=inputs.g_terminal,
-      n_years=inputs.n_years,
       discount_rate=inputs.discount_rate_r,
   )
 

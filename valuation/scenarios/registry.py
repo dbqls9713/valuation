@@ -32,7 +32,12 @@ from valuation.policies.capex import (
     IntensityClippedCapex,
 )
 from valuation.policies.growth import GrowthPolicy, CAGRGrowth
-from valuation.policies.fade import FadePolicy, LinearFade
+from valuation.policies.fade import (
+    FadePolicy,
+    LinearFade,
+    GeometricFade,
+    StepThenFade,
+)
 from valuation.policies.shares import SharePolicy, AvgShareChange
 from valuation.policies.terminal import TerminalPolicy, GordonTerminal
 from valuation.policies.discount import DiscountPolicy, FixedRate
@@ -69,6 +74,9 @@ GROWTH_POLICIES: Dict[str, Callable[[], GrowthPolicy]] = {
 FADE_POLICIES: Dict[str, Callable[[], FadePolicy]] = {
     'linear': lambda: LinearFade(g_end_spread=0.01),
     'linear_0p02': lambda: LinearFade(g_end_spread=0.02),
+    'geometric': lambda: GeometricFade(g_end_spread=0.01),
+    'step_5y': lambda: StepThenFade(high_growth_years=5, g_end_spread=0.01),
+    'step_3y': lambda: StepThenFade(high_growth_years=3, g_end_spread=0.01),
 }
 
 SHARE_POLICIES: Dict[str, Callable[[], SharePolicy]] = {

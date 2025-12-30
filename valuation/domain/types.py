@@ -6,7 +6,7 @@ policies don't directly depend on raw DataFrame columns.
 '''
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Generic, Optional, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 import pandas as pd
 
@@ -123,9 +123,9 @@ class PreparedInputs:
     oe0: Initial owner earnings (CFO - CAPEX)
     sh0: Current shares outstanding
     buyback_rate_b: Annual share reduction rate
-    g0: Initial growth rate
-    g_terminal: Terminal growth rate
-    g_end: Growth rate at end of explicit forecast (typically g_t + spread)
+    g0: Initial growth rate (first year in growth_path)
+    g_terminal: Terminal growth rate (for Gordon Growth)
+    growth_path: Yearly growth rates [g1, g2, ..., gN] from fade policy
     n_years: Number of explicit forecast years
     discount_rate_r: Required return / discount rate
   '''
@@ -134,9 +134,16 @@ class PreparedInputs:
   buyback_rate_b: float
   g0: float
   g_terminal: float
-  g_end: float
+  growth_path: List[float]
   n_years: int
   discount_rate_r: float
+
+  @property
+  def g_end(self) -> float:
+    '''Growth rate at end of explicit period (last in growth_path).'''
+    if not self.growth_path:
+      return self.g_terminal
+    return self.growth_path[-1]
 
 
 @dataclass
