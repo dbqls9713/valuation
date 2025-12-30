@@ -10,7 +10,7 @@ from data.silver.core.pipeline import Pipeline, PipelineContext
 from data.silver.sources.sec.extractors import SECCompanyFactsExtractor
 from data.silver.sources.sec.transforms import SECFactsTransformer, SECMetricsBuilder
 from data.silver.shared.validators import BasicValidator
-from data.silver.shared.io import ParquetWriter
+from data.shared.io import ParquetWriter
 
 
 class SECPipeline(Pipeline):

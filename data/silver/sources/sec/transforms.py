@@ -77,7 +77,11 @@ class SECFactsTransformer:
     if not out_parts:
       return pd.DataFrame(columns=df.columns)
 
-    return pd.concat(out_parts, ignore_index=True).reset_index(drop=True)
+    non_empty = [p for p in out_parts if not p.empty]
+    if not non_empty:
+      return pd.DataFrame(columns=df.columns)
+
+    return pd.concat(non_empty, ignore_index=True).reset_index(drop=True)
 
 
 class SECMetricsBuilder:
@@ -119,7 +123,11 @@ class SECMetricsBuilder:
         qg['metric'] = metric
         parts.append(qg)
 
-      q_all = pd.concat(parts, ignore_index=True).sort_values(['cik10', 'end'])
+      non_empty_parts = [p for p in parts if not p.empty]
+      if not non_empty_parts:
+        continue
+      q_all = pd.concat(non_empty_parts,
+                        ignore_index=True).sort_values(['cik10', 'end'])
 
       # Calculate TTM only for flow metrics (is_ytd=True)
       if bool(spec.get('is_ytd', False)):
@@ -130,7 +138,7 @@ class SECMetricsBuilder:
                                                             drop=True))
       else:
         # For point-in-time metrics (like SHARES), ttm_val is not meaningful
-        q_all['ttm_val'] = None
+        q_all['ttm_val'] = pd.Series([pd.NA] * len(q_all), dtype='Float64')
 
       out_parts.append(q_all[[
           'cik10', 'metric', 'end', 'filed', 'fy', 'fp', 'fiscal_year', 'q_val',
@@ -143,7 +151,25 @@ class SECMetricsBuilder:
           'ttm_val', 'tag'
       ])
 
-    out = pd.concat(out_parts, ignore_index=True)
+    # Filter out empty DataFrames and ensure consistent dtypes for concat
+    non_empty_parts = []
+    for p in out_parts:
+      if p.empty:
+        continue
+      p = p.copy()
+      if 'ttm_val' in p.columns:
+        p['ttm_val'] = p['ttm_val'].astype('Float64')
+      if 'q_val' in p.columns:
+        p['q_val'] = p['q_val'].astype('Float64')
+      non_empty_parts.append(p)
+
+    if not non_empty_parts:
+      return pd.DataFrame(columns=[
+          'cik10', 'metric', 'end', 'filed', 'fy', 'fp', 'fiscal_year', 'q_val',
+          'ttm_val', 'tag'
+      ])
+
+    out = pd.concat(non_empty_parts, ignore_index=True)
     out = out.sort_values(['cik10', 'metric', 'end']).reset_index(drop=True)
     return out
 

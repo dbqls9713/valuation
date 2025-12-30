@@ -8,7 +8,7 @@ import pandas as pd
 
 from data.silver.core.pipeline import Pipeline, PipelineContext
 from data.silver.shared.validators import BasicValidator
-from data.silver.shared.io import ParquetWriter
+from data.shared.io import ParquetWriter
 
 
 class StooqPipeline(Pipeline):
