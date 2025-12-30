@@ -111,7 +111,7 @@ class SECPipeline(Pipeline):
     facts_long = self.datasets.get('facts_long')
     has_filed = (facts_long is not None and not facts_long.empty and
                  'filed' in facts_long.columns)
-    if has_filed:
+    if has_filed and facts_long is not None:
       target_date = str(facts_long['filed'].max().date())
 
     for name, dataset in datasets_to_write.items():

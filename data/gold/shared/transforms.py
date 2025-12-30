@@ -65,11 +65,11 @@ def pivot_metrics_wide(
 
   filed_cols = [c for c in result.columns if c.endswith('_filed')]
   if not filed_cols:
-    return result
+    return result  # type: ignore[no-any-return]
 
   result['filed'] = result[filed_cols].max(axis=1)
   result = result.drop(columns=filed_cols)
-  return result
+  return result  # type: ignore[no-any-return]
 
 
 def join_prices_pit(

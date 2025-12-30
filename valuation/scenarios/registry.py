@@ -23,7 +23,7 @@ Example:
   CAPEX_POLICIES['my_new_capex'] = _my_new_capex
 '''
 
-from typing import Callable, Dict, Any
+from typing import Any, Callable, Dict, List, cast
 
 from valuation.policies.capex import (
     CapexPolicy,
@@ -173,14 +173,15 @@ def create_policies(config: ScenarioConfig) -> Dict[str, Any]:
   }
 
 
-def list_policies() -> Dict[str, list]:
+def list_policies() -> Dict[str, List[str]]:
   '''
   List all available policies by category.
 
   Returns:
     Dictionary mapping category names to list of policy names
   '''
-  return {
-      category: list(policies.keys())
-      for category, policies in POLICY_REGISTRY.items()
-  }
+  result: Dict[str, List[str]] = {}
+  for category, policies_dict in POLICY_REGISTRY.items():
+    policy_dict = cast(Dict[str, object], policies_dict)
+    result[category] = list(policy_dict.keys())
+  return result

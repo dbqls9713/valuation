@@ -18,7 +18,8 @@ class SECFactsTransformer:
   def add_fiscal_year(self, facts: pd.DataFrame,
                       companies: pd.DataFrame) -> pd.DataFrame:
     """Add fiscal_year column."""
-    return self.fiscal_year_calc.calculate(facts, companies)
+    result = self.fiscal_year_calc.calculate(facts, companies)
+    return result  # type: ignore[no-any-return]
 
   def deduplicate(self,
                   df: pd.DataFrame,

@@ -24,11 +24,11 @@ import pandas as pd
 
 def convert_parquet_to_csv(
     parquet_path: str,
-    output_path: str = None,
+    output_path: str | Path | None = None,
     preview: int = 0,
-    filter_expr: str = None,
-    columns: str = None,
-    sort_by: str = None,
+    filter_expr: str | None = None,
+    columns: str | None = None,
+    sort_by: str | None = None,
 ) -> None:
   """
     Convert parquet file to CSV.
@@ -100,14 +100,14 @@ def convert_parquet_to_csv(
     print('=' * 80)
 
   if output_path is None:
-    output_path = parquet_file.with_suffix('.csv')
+    output_file: Path = parquet_file.with_suffix('.csv')
   else:
-    output_path = Path(output_path)
+    output_file = Path(output_path)
 
-  print(f"\nWriting CSV: {output_path}")
-  df.to_csv(output_path, index=False)
+  print(f"\nWriting CSV: {output_file}")
+  df.to_csv(output_file, index=False)
 
-  csv_size = output_path.stat().st_size / 1024**2
+  csv_size = output_file.stat().st_size / 1024**2
   parquet_size = parquet_file.stat().st_size / 1024**2
 
   print(f"  CSV size: {csv_size:.2f} MB")
@@ -116,7 +116,7 @@ def convert_parquet_to_csv(
   print('✓ Done!')
 
 
-def main():
+def main() -> None:
   parser = argparse.ArgumentParser(
       description='Convert Parquet files to CSV for validation',
       formatter_class=argparse.RawDescriptionHelpFormatter,

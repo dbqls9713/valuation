@@ -74,7 +74,7 @@ class AvgShareChange(SharePolicy):
                           })
 
     shares_df = recent_shares.reset_index()
-    shares_df.columns = ['end', 'shares']
+    shares_df.columns = pd.Index(['end', 'shares'])
     shares_df['year'] = pd.to_datetime(shares_df['end']).dt.year
 
     yearly_shares = shares_df.groupby('year')['shares'].last()

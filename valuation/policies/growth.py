@@ -94,7 +94,7 @@ class CAGRGrowth(GrowthPolicy):
                           })
 
     oeps_df = oeps_history.reset_index()
-    oeps_df.columns = ['end', 'oeps']
+    oeps_df.columns = pd.Index(['end', 'oeps'])
     oeps_df['year'] = pd.to_datetime(oeps_df['end']).dt.year
 
     annual_oeps = oeps_df.groupby('year')['oeps'].last()

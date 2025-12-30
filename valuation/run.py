@@ -90,7 +90,8 @@ def adjust_for_splits(panel: pd.DataFrame) -> pd.DataFrame:
     ticker_data = ticker_data.drop(columns=['shares_ratio'])
     adjusted_parts.append(ticker_data)
 
-  return pd.concat(adjusted_parts, ignore_index=True)
+  result: pd.DataFrame = pd.concat(adjusted_parts, ignore_index=True)
+  return result
 
 
 def get_price_after_filing(
@@ -262,7 +263,7 @@ def run_valuation(
   )
 
 
-def main():
+def main() -> None:
   '''CLI entrypoint.'''
   parser = argparse.ArgumentParser(description='Run DCF valuation')
   parser.add_argument('--ticker',
@@ -336,8 +337,10 @@ def main():
   if result.market_price:
     logger.info('\nMarket Comparison:')
     logger.info('  Market Price: $%.2f', result.market_price)
-    logger.info('  Price/IV: %.2f%%', result.price_to_iv * 100)
-    logger.info('  Margin of Safety: %.2f%%', result.margin_of_safety * 100)
+    if result.price_to_iv is not None:
+      logger.info('  Price/IV: %.2f%%', result.price_to_iv * 100)
+    if result.margin_of_safety is not None:
+      logger.info('  Margin of Safety: %.2f%%', result.margin_of_safety * 100)
 
   logger.info('%s\n', separator)
 

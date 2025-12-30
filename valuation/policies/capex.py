@@ -81,7 +81,7 @@ class WeightedAverageCapex(CapexPolicy):
                           })
 
     capex_df = capex_series.reset_index()
-    capex_df.columns = ['end', 'capex_ttm']
+    capex_df.columns = pd.Index(['end', 'capex_ttm'])
     capex_df['year'] = pd.to_datetime(capex_df['end']).dt.year
 
     yearly_capex = capex_df.groupby('year')['capex_ttm'].last()
@@ -104,7 +104,9 @@ class WeightedAverageCapex(CapexPolicy):
     else:
       weights = list(range(1, n + 1))
 
-    weighted_capex = sum(abs(capex_years.values) * weights) / sum(weights)
+    weighted_capex = sum(
+        abs(float(v)) * w
+        for v, w in zip(capex_years.values, weights)) / sum(weights)
 
     return PolicyOutput(value=weighted_capex,
                         diag={
@@ -112,7 +114,9 @@ class WeightedAverageCapex(CapexPolicy):
                             'years_used': n,
                             'weights': weights,
                             'yearly_values': {
-                                int(y): float(v) for y, v in capex_years.items()
+                                int(y): float(v)
+                                for y, v in capex_years.items()
+                                if isinstance(y, (int, str))
                             },
                             'capex_raw_ttm': data.latest_capex_ttm,
                             'capex_weighted': weighted_capex,

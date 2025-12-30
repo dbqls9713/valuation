@@ -141,10 +141,13 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
   mq = m.copy()
   mq = mq[mq['fp'].isin(['Q1', 'Q2', 'Q3', 'Q4'])]
 
-  pivot = (mq.pivot_table(index=['cik10', 'metric', 'fiscal_year'],
-                          columns='fp',
-                          values='q_val',
-                          aggfunc='last').reset_index())
+  pivot = (
+      mq.pivot_table(
+          index=['cik10', 'metric', 'fiscal_year'],
+          columns='fp',
+          values='q_val',
+          aggfunc='last'  # type: ignore[arg-type]
+      ).reset_index())
 
   merged = f_ytd.merge(pivot, on=['cik10', 'metric', 'fiscal_year'], how='left')
 
@@ -156,17 +159,28 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
 
     fp = row['fp']
     if fp == 'Q1':
-      return float(q1) if pd.notna(q1) else float('nan')
+      q1_val = (
+          float(q1)  # type: ignore[arg-type]
+          if pd.notna(q1) else float('nan'))
+      return q1_val
     if fp == 'Q2':
-      val = float(q1 + q2) if pd.notna(q1) and pd.notna(q2) else float('nan')
+      val = (
+          float(q1 + q2)  # type: ignore[operator]
+          if pd.notna(q1) and pd.notna(q2) else float('nan'))
       return val
     if fp == 'Q3':
       all_present = pd.notna(q1) and pd.notna(q2) and pd.notna(q3)
-      return float(q1 + q2 + q3) if all_present else float('nan')
+      q3_val = (
+          float(q1 + q2 + q3)  # type: ignore[operator]
+          if all_present else float('nan'))
+      return q3_val
     if fp == 'FY':
       all_present = (pd.notna(q1) and pd.notna(q2) and pd.notna(q3) and
                      pd.notna(q4))
-      return float(q1 + q2 + q3 + q4) if all_present else float('nan')
+      fy_val = (
+          float(q1 + q2 + q3 + q4)  # type: ignore[operator]
+          if all_present else float('nan'))
+      return fy_val
     return float('nan')
 
   merged['recon'] = merged.apply(recon_ytd, axis=1)
@@ -346,22 +360,24 @@ def _manual_spotcheck(metrics_q: pd.DataFrame, fixture_path: Path,
   if missing.any():
     n = int(missing.sum())
     cols = ['cik10', 'metric', 'end']
-    sample = merged.loc[missing, cols].head(10).to_dict(orient='records')
-    msg = f'{n} fixture rows not found in metrics_quarterly. Sample: {sample}'
+    sample_missing = (merged.loc[missing,
+                                 cols].head(10).to_dict(orient='records'))
+    msg = (f'{n} fixture rows not found in metrics_quarterly. '
+           f'Sample: {sample_missing}')
     return CheckResult('manual_spotcheck', False, msg)
 
   merged['diff'] = (merged['q_val'] - merged['expected_val']).abs()
   bad = merged['diff'] > tol
   if bad.any():
     n = int(bad.sum())
-    sample = merged.loc[
+    sample_bad: pd.DataFrame = merged.loc[
         bad,
         ['cik10', 'metric', 'end', 'expected_val', 'q_val', 'diff']].head(10)
     return CheckResult(
         'manual_spotcheck',
         False,
         f'{n}/{len(merged)} fixture rows mismatch (tol={tol}). '
-        f'Sample:\n{sample.to_string(index=False)}',
+        f'Sample:\n{sample_bad.to_string(index=False)}',
     )
   return CheckResult('manual_spotcheck', True,
                      f'All fixture rows match (tol={tol}). Rows={len(merged)}')

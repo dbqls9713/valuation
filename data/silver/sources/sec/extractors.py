@@ -150,7 +150,7 @@ class SECCompanyFactsExtractor:
     return df, chosen
 
   @staticmethod
-  def _as_float(x: Any) -> float:
+  def _as_float(x: Any) -> float | None:
     if x is None:
       return None
     try:
