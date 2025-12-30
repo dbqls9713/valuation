@@ -122,6 +122,16 @@ class CAGRGrowth(GrowthPolicy):
                               **oeps_diag,
                           })
 
+    if last_oeps <= 0:
+      return PolicyOutput(value=float('nan'),
+                          diag={
+                              'growth_method': 'cagr',
+                              'error': 'negative_last_oeps',
+                              'first_oeps': first_oeps,
+                              'last_oeps': last_oeps,
+                              **oeps_diag,
+                          })
+
     raw_cagr = (last_oeps / first_oeps)**(1 / num_years) - 1
     clipped_cagr = max(self.clip_min, min(self.clip_max, raw_cagr))
     below_threshold = clipped_cagr <= self.threshold

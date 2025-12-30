@@ -24,7 +24,7 @@ import pandas as pd
 
 def convert_parquet_to_csv(
     parquet_path: str,
-    output_path: str | Path | None = None,
+    output_path: str | None = None,
     preview: int = 0,
     filter_expr: str | None = None,
     columns: str | None = None,
