@@ -20,9 +20,16 @@ class SECFactsTransformer:
     """Add fiscal_year column."""
     return self.fiscal_year_calc.calculate(facts, companies)
 
-  def deduplicate(self, df: pd.DataFrame) -> pd.DataFrame:
+  def deduplicate(self,
+                  df: pd.DataFrame,
+                  keep_all_versions: bool = False) -> pd.DataFrame:
     """
-    Keep only the latest filed value for each period.
+    Keep only the latest filed value for each period, or all versions.
+
+    Args:
+        df: Input DataFrame
+        keep_all_versions: If True, keep all filed versions for PIT analysis.
+                          If False, keep only the latest filed version.
 
     Uses fiscal_year for grouping when available.
     Filters out comparative statements (fy != fiscal_year) to avoid mixing
@@ -40,6 +47,14 @@ class SECFactsTransformer:
     # Filter out comparative statements: keep only fy == fiscal_year
     df = df[df['fy'] == df['fiscal_year']].copy()
 
+    if keep_all_versions:
+      # For PIT: keep all unique (end, fp, filed) combinations
+      # Remove exact duplicates but preserve different filing dates
+      return df.drop_duplicates(
+          subset=['cik10', 'metric', 'end', 'fp',
+                  'filed'], keep='last').reset_index(drop=True)
+
+    # Original logic: keep only latest filed version
     out_parts: List[pd.DataFrame] = []
 
     for _, g in df.groupby(['cik10', 'metric', 'fiscal_year'], dropna=True):

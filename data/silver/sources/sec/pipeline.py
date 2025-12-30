@@ -57,6 +57,7 @@ class SECPipeline(Pipeline):
     if facts.empty:
       self.datasets['facts_long'] = pd.DataFrame()
       self.datasets['metrics_quarterly'] = pd.DataFrame()
+      self.datasets['metrics_quarterly_history'] = pd.DataFrame()
       return
 
     facts = self.transformer.add_fiscal_year(facts, companies)
@@ -64,8 +65,19 @@ class SECPipeline(Pipeline):
 
     self.datasets['facts_long'] = facts
 
-    metrics_q = self.metrics_builder.build(facts)
-    self.datasets['metrics_quarterly'] = metrics_q
+    # Build metrics
+    metrics_q_all = self.metrics_builder.build(facts)
+
+    # Generate both versions
+    # 1. Latest version (for current valuation)
+    metrics_q_latest = self.transformer.deduplicate(metrics_q_all,
+                                                    keep_all_versions=False)
+    self.datasets['metrics_quarterly'] = metrics_q_latest
+
+    # 2. History version (for PIT backtest)
+    metrics_q_history = self.transformer.deduplicate(metrics_q_all,
+                                                     keep_all_versions=True)
+    self.datasets['metrics_quarterly_history'] = metrics_q_history
 
   def validate(self) -> None:
     """Run validation checks."""
@@ -82,9 +94,14 @@ class SECPipeline(Pipeline):
     self.out_dir.mkdir(parents=True, exist_ok=True)
 
     datasets_to_write = {
-        'companies': self.datasets.get('companies'),
-        'facts_long': self.datasets.get('facts_long'),
-        'metrics_quarterly': self.datasets.get('metrics_quarterly'),
+        'companies':
+            self.datasets.get('companies'),
+        'facts_long':
+            self.datasets.get('facts_long'),
+        'metrics_quarterly':
+            self.datasets.get('metrics_quarterly'),
+        'metrics_quarterly_history':
+            self.datasets.get('metrics_quarterly_history'),
     }
 
     cf_files = self._get_companyfact_files()
@@ -125,4 +142,4 @@ class SECPipeline(Pipeline):
     if not cf_dir.exists():
       return []
     return sorted(p for p in cf_dir.glob('CIK*.json')
-                 if not p.name.endswith('.meta.json'))
+                  if not p.name.endswith('.meta.json'))

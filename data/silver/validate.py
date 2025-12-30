@@ -31,6 +31,7 @@ import pandas as pd
 from data.silver.config.metric_specs import METRIC_SPECS
 from data.silver.config.schemas import (FACTS_LONG_SCHEMA,
                                         METRICS_QUARTERLY_SCHEMA,
+                                        METRICS_QUARTERLY_HISTORY_SCHEMA,
                                         PRICES_DAILY_SCHEMA)
 
 
@@ -391,6 +392,7 @@ def main() -> None:
 
   facts_path = sec_dir / 'facts_long.parquet'
   metrics_q_path = sec_dir / 'metrics_quarterly.parquet'
+  metrics_h_path = sec_dir / 'metrics_quarterly_history.parquet'
   prices_path = stooq_dir / 'prices_daily.parquet'
   manual_fixture_path = Path('data/validation/sec_manual_spotcheck.csv')
 
@@ -404,6 +406,8 @@ def main() -> None:
 
   facts = pd.read_parquet(facts_path)
   metrics_q = pd.read_parquet(metrics_q_path)
+  metrics_h = pd.read_parquet(
+      metrics_h_path) if metrics_h_path.exists() else pd.DataFrame()
   prices = pd.read_parquet(
       prices_path) if prices_path.exists() else pd.DataFrame()
 
@@ -425,7 +429,8 @@ def main() -> None:
 
   print(f'Validating Silver layer: {silver_dir}')
   print(f'  Facts: {facts.shape}')
-  print(f'  Metrics: {metrics_q.shape}')
+  print(f'  Metrics (latest): {metrics_q.shape}')
+  print(f'  Metrics (history): {metrics_h.shape}')
   print(f"  Prices: {prices.shape if not prices.empty else 'N/A'}")
   print(f"  Companies: {companies.shape if not companies.empty else 'N/A'}")
   print(f"  Target date: {target_date or 'N/A'}")
@@ -436,6 +441,10 @@ def main() -> None:
   results.append(_check_schema(facts, FACTS_LONG_SCHEMA, 'facts_long'))
   results.append(
       _check_schema(metrics_q, METRICS_QUARTERLY_SCHEMA, 'metrics_quarterly'))
+  if not metrics_h.empty:
+    results.append(
+        _check_schema(metrics_h, METRICS_QUARTERLY_HISTORY_SCHEMA,
+                      'metrics_quarterly_history'))
   if not prices.empty:
     results.append(_check_schema(prices, PRICES_DAILY_SCHEMA, 'prices_daily'))
 
@@ -454,8 +463,15 @@ def main() -> None:
   results.append(
       _assert_unique(metrics_q, ['cik10', 'metric', 'end', 'fp'],
                      'metrics_unique_period'))
+  if not metrics_h.empty:
+    results.append(
+        _assert_unique(metrics_h, ['cik10', 'metric', 'end', 'fp', 'filed'],
+                       'metrics_history_unique'))
   results.append(_assert_filed_ge_end(facts, 'facts_filed_ge_end'))
   results.append(_assert_filed_ge_end(metrics_q, 'metrics_filed_ge_end'))
+  if not metrics_h.empty:
+    results.append(
+        _assert_filed_ge_end(metrics_h, 'metrics_history_filed_ge_end'))
 
   results.append(_check_ytd_identity(facts, metrics_q, tol=float(args.tol)))
   results.append(_check_ttm(metrics_q, tol=float(args.tol)))

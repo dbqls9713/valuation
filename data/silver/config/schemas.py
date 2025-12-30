@@ -58,7 +58,7 @@ FACTS_LONG_SCHEMA = DatasetSchema(
 
 METRICS_QUARTERLY_SCHEMA = DatasetSchema(
     name='metrics_quarterly',
-    description='Quarterly discrete and TTM values derived from facts_long',
+    description='Latest filed quarterly values (for current valuation)',
     columns=[
         ColumnSpec('cik10',
                    'str',
@@ -99,6 +99,50 @@ METRICS_QUARTERLY_SCHEMA = DatasetSchema(
         ColumnSpec('tag', 'str', nullable=False, description='XBRL tag used'),
     ],
     primary_key=['cik10', 'metric', 'end', 'fp'])
+
+METRICS_QUARTERLY_HISTORY_SCHEMA = DatasetSchema(
+    name='metrics_quarterly_history',
+    description='All filed versions including restatements (for PIT backtest)',
+    columns=[
+        ColumnSpec('cik10',
+                   'str',
+                   nullable=False,
+                   description='CIK padded to 10 digits'),
+        ColumnSpec('metric',
+                   'str',
+                   nullable=False,
+                   description='Metric name (CFO, CAPEX, SHARES)'),
+        ColumnSpec('end',
+                   'datetime64[ns]',
+                   nullable=False,
+                   description='Period end date'),
+        ColumnSpec('filed',
+                   'datetime64[ns]',
+                   nullable=False,
+                   description='Filing date'),
+        ColumnSpec('fy',
+                   'int64',
+                   nullable=False,
+                   description='Fiscal year from SEC filing'),
+        ColumnSpec('fp',
+                   'str',
+                   nullable=False,
+                   description='Fiscal period (Q1, Q2, Q3, Q4)'),
+        ColumnSpec('fiscal_year',
+                   'int64',
+                   nullable=False,
+                   description='Calculated fiscal year'),
+        ColumnSpec('q_val',
+                   'float64',
+                   nullable=False,
+                   description='Discrete quarterly value'),
+        ColumnSpec('ttm_val',
+                   'float64',
+                   nullable=True,
+                   description='Trailing 12-month sum (null for <4 quarters)'),
+        ColumnSpec('tag', 'str', nullable=False, description='XBRL tag used'),
+    ],
+    primary_key=['cik10', 'metric', 'end', 'fp', 'filed'])
 
 PRICES_DAILY_SCHEMA = DatasetSchema(
     name='prices_daily',
