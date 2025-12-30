@@ -1,4 +1,4 @@
-"""
+'''
 bronze_pipeline.py
 
 Bronze (raw) ingestion pipeline for:
@@ -18,7 +18,7 @@ References:
 - SEC submissions endpoint:
   https://data.sec.gov/submissions/CIK##########.json
 - SEC access policy: max 10 req/s + declare User-Agent
-"""
+'''
 
 from __future__ import annotations
 
@@ -36,14 +36,14 @@ import requests
 # Config
 # ---------------------------
 
-SEC_COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+SEC_COMPANY_TICKERS_URL = 'https://www.sec.gov/files/company_tickers.json'
 
 SEC_COMPANYFACTS_URL_TMPL = (
-    "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik10}.json")
-SEC_SUBMISSIONS_URL_TMPL = "https://data.sec.gov/submissions/CIK{cik10}.json"
+    'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik10}.json')
+SEC_SUBMISSIONS_URL_TMPL = 'https://data.sec.gov/submissions/CIK{cik10}.json'
 
 # Commonly used by Stooq download button; widely used in practice.
-STOOQ_DAILY_CSV_URL_TMPL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
+STOOQ_DAILY_CSV_URL_TMPL = 'https://stooq.com/q/d/l/?s={symbol}&i=d'
 
 
 @dataclass(frozen=True)
@@ -72,20 +72,20 @@ def is_fresh(path: Path, refresh_days: int) -> bool:
 
 
 def atomic_write_bytes(path: Path, content: bytes) -> None:
-  tmp = path.with_suffix(path.suffix + ".tmp")
+  tmp = path.with_suffix(path.suffix + '.tmp')
   tmp.write_bytes(content)
   tmp.replace(path)
 
 
 def write_meta(path: Path, meta: Dict[str, Any]) -> None:
-  meta_path = path.with_suffix(path.suffix + ".meta.json")
+  meta_path = path.with_suffix(path.suffix + '.meta.json')
   atomic_write_bytes(
       meta_path,
-      json.dumps(meta, ensure_ascii=False, indent=2).encode("utf-8"))
+      json.dumps(meta, ensure_ascii=False, indent=2).encode('utf-8'))
 
 
 class RateLimiter:
-  """Simple min-interval rate limiter."""
+  '''Simple min-interval rate limiter.'''
 
   def __init__(self, min_interval_sec: float) -> None:
     self._min_interval = float(min_interval_sec)
@@ -120,7 +120,7 @@ def fetch_bytes(
       content = resp.content
 
       if status >= 400:
-        raise requests.HTTPError(f"HTTP {status} for {url}: {resp.text[:200]}")
+        raise requests.HTTPError(f'HTTP {status} for {url}: {resp.text[:200]}')
 
       return content, FetchResult(
           url=url,
@@ -139,16 +139,16 @@ def fetch_bytes(
 
 
 def load_ticker_map(company_tickers_json: bytes) -> Dict[str, str]:
-  """
+  '''
   SEC company_tickers.json format:
-    {"0":{"cik_str":1652044,"ticker":"GOOGL","title":"Alphabet Inc."}, ...}
-  Returns: { "GOOGL": "0001652044", ... }
-  """
-  raw = json.loads(company_tickers_json.decode("utf-8"))
+    {'0':{'cik_str':1652044,'ticker':'GOOGL','title':'Alphabet Inc.'}, ...}
+  Returns: { 'GOOGL': '0001652044', ... }
+  '''
+  raw = json.loads(company_tickers_json.decode('utf-8'))
   out: Dict[str, str] = {}
   for _, v in raw.items():
-    ticker = str(v.get("ticker", "")).upper().strip()
-    cik = str(v.get("cik_str", "")).strip()
+    ticker = str(v.get('ticker', '')).upper().strip()
+    cik = str(v.get('cik_str', '')).strip()
     if not ticker or not cik:
       continue
     cik10 = cik.zfill(10)
@@ -169,19 +169,19 @@ def save_if_needed(
     refresh_days: int,
     force: bool,
 ) -> bool:
-  """
+  '''
   Returns True if a download/write happened, False if skipped.
-  """
+  '''
   if not force and is_fresh(path, refresh_days):
     return False
 
   atomic_write_bytes(path, content)
   write_meta(
       path, {
-          "url": result.url,
-          "status_code": result.status_code,
-          "nbytes": result.nbytes,
-          "fetched_at_utc": result.fetched_at_utc,
+          'url': result.url,
+          'status_code': result.status_code,
+          'nbytes': result.nbytes,
+          'fetched_at_utc': result.fetched_at_utc,
       })
   return True
 
@@ -189,7 +189,7 @@ def save_if_needed(
 def iter_tickers(values: Iterable[str]) -> Iterable[str]:
   for v in values:
     # allow comma separated
-    for t in v.split(","):
+    for t in v.split(','):
       t = t.strip()
       if t:
         yield t.upper()
@@ -208,23 +208,23 @@ def run(
 ) -> None:
   ensure_dir(out_dir)
 
-  sec_dir = out_dir / "sec"
-  stooq_dir = out_dir / "stooq" / "daily"
-  ensure_dir(sec_dir / "companyfacts")
-  ensure_dir(sec_dir / "submissions")
+  sec_dir = out_dir / 'sec'
+  stooq_dir = out_dir / 'stooq' / 'daily'
+  ensure_dir(sec_dir / 'companyfacts')
+  ensure_dir(sec_dir / 'submissions')
   ensure_dir(stooq_dir)
 
   session = requests.Session()
 
   # SEC headers (declare User-Agent)
   sec_headers = {
-      "User-Agent": sec_user_agent,
-      "Accept-Encoding": "gzip, deflate",
+      'User-Agent': sec_user_agent,
+      'Accept-Encoding': 'gzip, deflate',
   }
   sec_limiter = RateLimiter(min_interval_sec=sec_min_interval_sec)
 
   # 1) company_tickers.json
-  tickers_path = sec_dir / "company_tickers.json"
+  tickers_path = sec_dir / 'company_tickers.json'
   if force or (not is_fresh(tickers_path, refresh_days)):
     content, fr = fetch_bytes(session,
                               SEC_COMPANY_TICKERS_URL,
@@ -236,23 +236,23 @@ def run(
                          refresh_days=refresh_days,
                          force=force)
     if did:
-      print(f"[SEC] saved {tickers_path} ({fr.nbytes} bytes)")
+      print(f'[SEC] saved {tickers_path} ({fr.nbytes} bytes)')
   else:
-    print(f"[SEC] skip fresh {tickers_path}")
+    print(f'[SEC] skip fresh {tickers_path}')
 
   ticker_map = load_ticker_map(tickers_path.read_bytes())
 
   # 2) companyfacts (+ optional submissions)
   for ticker in tickers:
     if ticker not in ticker_map:
-      print(f"[WARN] ticker not found in SEC map: {ticker}")
+      print(f'[WARN] ticker not found in SEC map: {ticker}')
       continue
 
     cik10 = ticker_map[ticker]
 
     # companyfacts
     cf_url = SEC_COMPANYFACTS_URL_TMPL.format(cik10=cik10)
-    cf_path = sec_dir / "companyfacts" / f"CIK{cik10}.json"
+    cf_path = sec_dir / 'companyfacts' / f'CIK{cik10}.json'
     if force or (not is_fresh(cf_path, refresh_days)):
       content, fr = fetch_bytes(session,
                                 cf_url,
@@ -264,14 +264,14 @@ def run(
                            refresh_days=refresh_days,
                            force=force)
       if did:
-        print(f"[SEC] saved companyfacts {ticker} -> {cf_path.name}")
+        print(f'[SEC] saved companyfacts {ticker} -> {cf_path.name}')
     else:
-      print(f"[SEC] skip fresh companyfacts {ticker}")
+      print(f'[SEC] skip fresh companyfacts {ticker}')
 
     # submissions (optional)
     if include_submissions:
       sub_url = SEC_SUBMISSIONS_URL_TMPL.format(cik10=cik10)
-      sub_path = sec_dir / "submissions" / f"CIK{cik10}.json"
+      sub_path = sec_dir / 'submissions' / f'CIK{cik10}.json'
       if force or (not is_fresh(sub_path, refresh_days)):
         content, fr = fetch_bytes(session,
                                   sub_url,
@@ -283,22 +283,22 @@ def run(
                              refresh_days=refresh_days,
                              force=force)
         if did:
-          print(f"[SEC] saved submissions {ticker} -> {sub_path.name}")
+          print(f'[SEC] saved submissions {ticker} -> {sub_path.name}')
       else:
-        print(f"[SEC] skip fresh submissions {ticker}")
+        print(f'[SEC] skip fresh submissions {ticker}')
 
   # 3) Stooq daily price CSV
   # Note: Stooq may rate-limit/geo-block occasionally; keep retries modest.
   px_headers = {
-      "User-Agent": "Mozilla/5.0 (compatible; valuation-research/1.0)"
+      'User-Agent': 'Mozilla/5.0 (compatible; valuation-research/1.0)'
   }
   for sym in stooq_symbols:
     sym_n = normalize_stooq_symbol(sym)
     url = STOOQ_DAILY_CSV_URL_TMPL.format(symbol=sym_n)
-    out_path = stooq_dir / f"{sym_n}.csv"
+    out_path = stooq_dir / f'{sym_n}.csv'
 
     if not force and is_fresh(out_path, refresh_days):
-      print(f"[STOOQ] skip fresh {out_path.name}")
+      print(f'[STOOQ] skip fresh {out_path.name}')
       continue
 
     content, fr = fetch_bytes(session,
@@ -313,52 +313,81 @@ def run(
                          refresh_days=refresh_days,
                          force=force)
     if did:
-      print(f"[STOOQ] saved {out_path.name} ({fr.nbytes} bytes)")
+      print(f'[STOOQ] saved {out_path.name} ({fr.nbytes} bytes)')
 
 
 def build_argparser() -> argparse.ArgumentParser:
-  p = argparse.ArgumentParser(description="Bronze raw ingestion: SEC + Stooq")
-  p.add_argument("--out",
-                 default="data/bronze/out",
-                 help="output root directory")
-  p.add_argument("--tickers",
-                 nargs="*",
-                 default=["GOOGL"],
-                 help="US tickers for SEC (e.g., GOOGL MSFT)")
-  p.add_argument("--stooq",
-                 nargs="*",
-                 default=["GOOGL.US"],
-                 help="Stooq symbols (e.g., GOOGL.US MSFT.US)")
-  p.add_argument("--include-submissions",
-                 action="store_true",
-                 help="also fetch SEC submissions JSON")
+  p = argparse.ArgumentParser(description='Bronze raw ingestion: SEC + Stooq')
+  p.add_argument('--out',
+                 default='data/bronze/out',
+                 help='output root directory')
+  p.add_argument('--tickers',
+                 nargs='*',
+                 help='US tickers for SEC (e.g., GOOGL MSFT)')
+  p.add_argument('--tickers-file',
+                 type=Path,
+                 help='Path to file containing ticker list (one per line)')
+  p.add_argument('--include-submissions',
+                 action='store_true',
+                 help='also fetch SEC submissions JSON')
   p.add_argument(
-      "--refresh-days",
+      '--refresh-days',
       type=int,
       default=7,
-      help="skip download if file newer than N days (0 disables freshness)")
-  p.add_argument("--force",
-                 action="store_true",
-                 help="always re-download regardless of freshness")
+      help='skip download if file newer than N days (0 disables freshness)')
+  p.add_argument('--force',
+                 action='store_true',
+                 help='always re-download regardless of freshness')
   p.add_argument(
-      "--sec-user-agent",
-      default="YubinYi valuation research yuvin.yi@yanolja.com",
-      help="SEC requires declared User-Agent (company/contact).",
+      '--sec-user-agent',
+      default='YubinYi valuation research yuvin.yi@yanolja.com',
+      help='SEC requires declared User-Agent (company/contact).',
   )
   # SEC max is 10 req/s; keep safer default: 0.2s => 5 req/s
-  p.add_argument("--sec-min-interval",
+  p.add_argument('--sec-min-interval',
                  type=float,
                  default=0.2,
-                 help="min seconds between SEC requests")
+                 help='min seconds between SEC requests')
   return p
 
 
-if __name__ == "__main__":
+def load_tickers_from_file(path: Path) -> list[str]:
+  '''Load tickers from file (one per line, # for comments).'''
+  if not path.exists():
+    raise FileNotFoundError(f'Tickers file not found: {path}')
+
+  with open(path, 'r', encoding='utf-8') as f:
+    tickers = [
+        line.strip()
+        for line in f
+        if line.strip() and not line.strip().startswith('#')
+    ]
+
+  if not tickers:
+    raise ValueError('No tickers found in file')
+
+  return tickers
+
+
+if __name__ == '__main__':
   args = build_argparser().parse_args()
+
+  # Load tickers from file or use command line args
+  if args.tickers_file:
+    tickers_list = load_tickers_from_file(args.tickers_file)
+    print(f'Loaded {len(tickers_list)} tickers from {args.tickers_file}')
+  elif args.tickers:
+    tickers_list = args.tickers
+  else:
+    # Default ticker if none specified
+    tickers_list = ['GOOGL']
+    print('Using default ticker: GOOGL')
+
+  stooq_list = [f'{t}.US' for t in tickers_list]
   run(
       out_dir=Path(args.out),
-      tickers=list(iter_tickers(args.tickers)),
-      stooq_symbols=list(iter_tickers(args.stooq)),
+      tickers=list(iter_tickers(tickers_list)),
+      stooq_symbols=list(iter_tickers(stooq_list)),
       include_submissions=bool(args.include_submissions),
       refresh_days=int(args.refresh_days),
       force=bool(args.force),

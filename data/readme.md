@@ -48,7 +48,13 @@ Minimum recommended fields:
 ```
 python data/bronze/update.py \
   --tickers GOOGL MSFT META \
-  --stooq GOOGL.US MSFT.US META.US \
+  --refresh-days 30 \
+  --include-submissions
+```
+or use a file containing the tickers
+```
+python data/bronze/update.py \
+  --tickers-file tickers_example.txt \
   --refresh-days 30 \
   --include-submissions
 ```

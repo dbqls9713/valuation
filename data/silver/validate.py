@@ -16,7 +16,7 @@ Checks:
 
 Run:
   python -m data.silver.validate
-  python -m data.silver.validate --silver-dir data/silver_out
+  python -m data.silver.validate --silver-dir data/silver/out
   python -m data.silver.validate --with-manual
 """
 
@@ -371,7 +371,7 @@ def main() -> None:
   ap = argparse.ArgumentParser(description='Validate Silver layer outputs')
   ap.add_argument('--silver-dir',
                   type=Path,
-                  default=Path('data/silver_out'),
+                  default=Path('data/silver/out'),
                   help='Silver directory to validate')
   ap.add_argument('--tol',
                   type=float,

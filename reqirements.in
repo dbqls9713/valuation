@@ -3,3 +3,4 @@ pandas==2.1.4
 pandas-datareader==0.10.0
 setuptools>=65.0.0
 pyarrow==14.0.1
+matplotlib==3.10.1
