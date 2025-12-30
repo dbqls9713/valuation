@@ -105,6 +105,10 @@ class SECMetricsBuilder:
       if bool(spec.get('abs', False)):
         df['val'] = df['val'].abs()
 
+      # Normalize to actual count if specified (for SHARES)
+      if bool(spec.get('normalize_to_actual_count', False)):
+        df['val'] = self._normalize_shares_to_actual_count(df['val'])
+
       parts = []
       for cik10, g in df.groupby('cik10'):
         if bool(spec.get('is_ytd', False)):
@@ -173,6 +177,29 @@ class SECMetricsBuilder:
     out = pd.concat(non_empty_parts, ignore_index=True)
     out = out.sort_values(['cik10', 'metric', 'end']).reset_index(drop=True)
     return out
+
+  @staticmethod
+  def _normalize_shares_to_actual_count(series: pd.Series) -> pd.Series:
+    '''
+    Normalize shares to actual count (not millions).
+
+    Heuristic: If value < 1,000,000, assume it's in millions
+    and multiply by 1M. Otherwise, assume it's already actual count.
+
+    Examples:
+      717.2 → 717,200,000 (was in millions)
+      7,466,000,000 → 7,466,000,000 (already actual count)
+    '''
+    threshold = 1_000_000
+
+    def normalize_value(val):
+      if pd.isna(val):
+        return val
+      if abs(val) < threshold:
+        return val * 1_000_000
+      return val
+
+    return series.apply(normalize_value)  # type: ignore[no-any-return]
 
   def _ytd_to_quarter(self,
                       df_ytd: pd.DataFrame,

@@ -36,5 +36,6 @@ METRIC_SPECS = {
         'unit': 'shares',
         'is_ytd': False,
         'abs': False,
+        'normalize_to_actual_count': True,
     },
 }

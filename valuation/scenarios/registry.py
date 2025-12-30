@@ -59,16 +59,16 @@ CAPEX_POLICIES: Dict[str, Callable[[], CapexPolicy]] = {
 GROWTH_POLICIES: Dict[str, Callable[[], GrowthPolicy]] = {
     'cagr_3y_clip':
         lambda: CAGRGrowth(
-            min_years=3, threshold=0.04, clip_min=0.0, clip_max=0.18),
+            min_years=3, threshold=0.0, clip_min=0.0, clip_max=0.18),
     'cagr_3y_clip_25':
         lambda: CAGRGrowth(
-            min_years=3, threshold=0.04, clip_min=0.0, clip_max=0.25),
+            min_years=3, threshold=0.0, clip_min=0.0, clip_max=0.25),
     'cagr_3y_no_clip':
         lambda: CAGRGrowth(
-            min_years=3, threshold=0.04, clip_min=-1.0, clip_max=1.0),
+            min_years=3, threshold=0.0, clip_min=-1.0, clip_max=1.0),
     'cagr_5y_clip':
         lambda: CAGRGrowth(
-            min_years=5, threshold=0.04, clip_min=0.0, clip_max=0.18),
+            min_years=5, threshold=0.0, clip_min=0.0, clip_max=0.18),
 }
 
 FADE_POLICIES: Dict[str, Callable[[], FadePolicy]] = {

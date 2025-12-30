@@ -185,25 +185,21 @@ def run_valuation(
   growth_result = policies['growth'].compute(data, policies['capex'])
   all_diag.update({f'growth_{k}': v for k, v in growth_result.diag.items()})
 
-  if growth_result.diag.get('below_threshold', False):
-    return ValuationResult(iv_per_share=float('nan'),
-                           pv_explicit=float('nan'),
-                           tv_component=float('nan'),
-                           diag={
-                               **all_diag,
-                               'excluded': True,
-                               'exclusion_reason': 'growth_below_threshold',
-                           })
-
   terminal_result = policies['terminal'].compute()
   all_diag.update({f'terminal_{k}': v for k, v in terminal_result.diag.items()})
 
-  fade_result = policies['fade'].compute(
-      g0=growth_result.value,
-      g_terminal=terminal_result.value,
-      n_years=config.n_years,
-  )
-  all_diag.update({f'fade_{k}': v for k, v in fade_result.diag.items()})
+  if growth_result.diag.get('below_threshold', False):
+    logger.debug('%s: Growth below threshold, using 0%% growth path', ticker)
+    growth_path = [0.0] * config.n_years
+    all_diag['growth_path_override'] = 'zero_growth'
+  else:
+    fade_result = policies['fade'].compute(
+        g0=growth_result.value,
+        g_terminal=terminal_result.value,
+        n_years=config.n_years,
+    )
+    all_diag.update({f'fade_{k}': v for k, v in fade_result.diag.items()})
+    growth_path = fade_result.value
 
   shares_result = policies['shares'].compute(data)
   all_diag.update({f'shares_{k}': v for k, v in shares_result.diag.items()})
@@ -213,8 +209,6 @@ def run_valuation(
 
   oe0 = data.latest_cfo_ttm - capex_result.value
   sh0 = data.latest_shares
-
-  growth_path = fade_result.value
 
   inputs = PreparedInputs(
       oe0=oe0,

@@ -50,7 +50,7 @@ class CAGRGrowth(GrowthPolicy):
   def __init__(
       self,
       min_years: int = 3,
-      threshold: float = 0.04,
+      threshold: float = 0.0,
       clip_min: float = 0.0,
       clip_max: float = 0.18,
   ):
