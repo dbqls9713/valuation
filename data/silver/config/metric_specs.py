@@ -20,6 +20,10 @@ METRIC_SPECS = {
         'tags': [
             'PaymentsToAcquirePropertyPlantAndEquipment',
             'CapitalExpenditures',
+            'PaymentsToAcquireProductiveAssets',
+            'PaymentsToAcquireOtherProductiveAssets',
+            'PaymentsToAcquireMachineryAndEquipment',
+            'PaymentsToAcquireOilAndGasPropertyAndEquipment',
         ],
         'unit': 'USD',
         'is_ytd': True,

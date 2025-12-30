@@ -85,6 +85,18 @@ class FundamentalsSlice:
     pit_data = pit_data.sort_values('end')
     latest = pit_data.iloc[-1]
 
+    # Validate required fields
+    required_fields = {
+        'cfo_ttm': latest['cfo_ttm'],
+        'capex_ttm': latest['capex_ttm'],
+        'shares_q': latest['shares_q'],
+    }
+    missing = [k for k, v in required_fields.items() if pd.isna(v)]
+    if missing:
+      raise ValueError(
+          f'{ticker}: Missing required data as of {as_of_date.date()}: '
+          f'{', '.join(missing)}')
+
     return cls(
         ticker=ticker,
         as_of_end=latest['end'],
