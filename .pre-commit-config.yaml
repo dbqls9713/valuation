@@ -23,3 +23,10 @@ repos:
         args:
           - --style
           - yapf
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        args: ["--config-file", "mypy.ini"]
+        exclude: (?x)(.*test.*\.py$|venv/|backtest/|valuation_table/)
+        additional_dependencies: [pydantic, types-requests, pandas-stubs]

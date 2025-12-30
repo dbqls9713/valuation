@@ -1,1 +1,9 @@
 venv
+**/*.pyc
+**/*.json
+**/*.parquet
+**/*.csv
+**/*.png
+**/*.txt
+!data/bronze/tickers_example.txt
+.DS_Store

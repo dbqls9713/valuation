@@ -1,0 +1,5 @@
+# Example tickers
+AAPL
+GOOGL
+META
+MSFT
