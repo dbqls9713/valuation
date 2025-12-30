@@ -15,7 +15,7 @@ from typing import Optional
 
 import pandas as pd
 
-from data.silver.io import write_parquet_with_meta
+from data.silver.shared.io import ParquetWriter
 
 
 def build_valuation_panel(
@@ -42,7 +42,10 @@ def build_valuation_panel(
   panel = _build_panel(companies, metrics_q, prices, min_date=min_date)
 
   gold_dir.mkdir(parents=True, exist_ok=True)
-  write_parquet_with_meta(
+
+  # Write with metadata
+  writer = ParquetWriter()
+  writer.write(
       panel,
       gold_dir / "valuation_panel.parquet",
       inputs=[
@@ -50,7 +53,7 @@ def build_valuation_panel(
           silver_dir / "sec" / "metrics_quarterly.parquet",
           silver_dir / "stooq" / "prices_daily.parquet",
       ],
-      meta_extra={
+      metadata={
           "layer": "gold",
           "dataset": "valuation_panel",
           "min_date": min_date,
@@ -71,12 +74,17 @@ def _build_panel(
 
     Strategy:
     1. Pivot metrics to wide format (one row per cik10/end)
-    2. Map cik10 -> ticker
-    3. Join with daily prices (ticker/date)
-    4. Calculate market cap
-    5. Filter and sort
+    2. Filter to rows with both CFO_TTM and CAPEX_TTM (complete data)
+    3. Map cik10 -> ticker
+    4. Join with daily prices (ticker/date)
+    5. Calculate market cap
+    6. Filter and sort
     """
   metrics_wide = _pivot_metrics_wide(metrics_q)
+
+  # Keep only rows where both CFO_TTM and CAPEX_TTM are available
+  metrics_wide = metrics_wide[metrics_wide["cfo_ttm"].notna() &
+                              metrics_wide["capex_ttm"].notna()].copy()
 
   metrics_wide = metrics_wide.merge(companies[["cik10", "ticker"]],
                                     on="cik10",
@@ -105,6 +113,10 @@ def _pivot_metrics_wide(metrics_q: pd.DataFrame) -> pd.DataFrame:
 
     Input: long format (cik10, metric, end, q_val, ttm_val)
     Output: wide format (cik10, end, cfo_q, cfo_ttm, capex_q, ...)
+
+    Note: filed date is preserved using max() to get the latest filing date
+    for each (cik10, end) combination. This handles cases where different
+    metrics have different filing dates for the same period.
     """
   metrics_list = metrics_q["metric"].unique()
 
@@ -113,25 +125,37 @@ def _pivot_metrics_wide(metrics_q: pd.DataFrame) -> pd.DataFrame:
     m = metrics_q[metrics_q["metric"] == metric].copy()
 
     m_wide = m.pivot_table(
-        index=["cik10", "end", "filed"],
-        values=["q_val", "ttm_val"],
-        aggfunc="first",
+        index=["cik10", "end"],
+        values=["q_val", "ttm_val", "filed"],
+        aggfunc={
+            "q_val": "first",
+            "ttm_val": "first",
+            "filed": "max"
+        },
     ).reset_index()
 
     metric_lower = metric.lower()
-    m_wide = m_wide.rename(columns={
-        "q_val": f"{metric_lower}_q",
-        "ttm_val": f"{metric_lower}_ttm",
-    })
+    m_wide = m_wide.rename(
+        columns={
+            "q_val": f"{metric_lower}_q",
+            "ttm_val": f"{metric_lower}_ttm",
+            "filed": f"{metric_lower}_filed",
+        })
 
     parts.append(m_wide)
 
   if not parts:
-    return pd.DataFrame(columns=["cik10", "end", "filed"])
+    return pd.DataFrame(columns=["cik10", "end"])
 
   result = parts[0]
   for part in parts[1:]:
-    result = result.merge(part, on=["cik10", "end", "filed"], how="outer")
+    result = result.merge(part, on=["cik10", "end"], how="outer")
+
+  # Consolidate filed dates: use the latest filed date across all metrics
+  filed_cols = [c for c in result.columns if c.endswith("_filed")]
+  if filed_cols:
+    result["filed"] = result[filed_cols].max(axis=1)
+    result = result.drop(columns=filed_cols)
 
   return result
 

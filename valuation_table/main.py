@@ -80,12 +80,12 @@ class GoldAccountingRepository(AccountingRepository):
   """
     Repository that reads from Gold layer valuation panel.
 
-    Loads data from data/gold/valuation_panel.parquet and provides
+    Loads data from data/gold/out/valuation_panel.parquet and provides
     latest TTM values and historical shares count by fiscal year.
     """
 
   def __init__(self,
-               gold_panel_path: str = "data/gold/valuation_panel.parquet"):
+               gold_panel_path: str = "data/gold/out/valuation_panel.parquet"):
     """
         Initialize repository with Gold panel data.
 
@@ -498,7 +498,7 @@ if __name__ == "__main__":
       help="Data source: 'memory' (hardcoded) or 'gold' (panel)")
   parser.add_argument("--gold-panel-path",
                       type=str,
-                      default="data/gold/valuation_panel.parquet",
+                      default="data/gold/out/valuation_panel.parquet",
                       help="Path to Gold panel parquet file")
   parser.add_argument("--min-initial-growth-rate",
                       type=float,

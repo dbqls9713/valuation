@@ -318,7 +318,9 @@ def run(
 
 def build_argparser() -> argparse.ArgumentParser:
   p = argparse.ArgumentParser(description="Bronze raw ingestion: SEC + Stooq")
-  p.add_argument("--out", default="data/bronze", help="output root directory")
+  p.add_argument("--out",
+                 default="data/bronze/out",
+                 help="output root directory")
   p.add_argument("--tickers",
                  nargs="*",
                  default=["GOOGL"],
