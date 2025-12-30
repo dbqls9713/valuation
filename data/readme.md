@@ -1,84 +1,77 @@
-# data/ — Valuation Data Lake (Bronze only)
+# Data Pipeline (Bronze → Silver → Gold)
 
-This repo stores raw data snapshots used for valuation research.
-Current scope: **Bronze layer only** (raw, source-truth).
+ETL pipeline for financial data processing with medallion architecture.
 
-## Layer: Bronze (raw snapshots)
-**Purpose**
-- Cache vendor/API responses to minimize re-fetching
-- Keep source-truth for reproducibility and independent verification
+## Bronze Layer
 
-**Rules**
-- Do NOT manually edit files under `data/bronze/`
-- Prefer append/refresh by pipeline; avoid ad-hoc downloads
-- Every raw file should have a sidecar metadata file: `*.meta.json`
+**Purpose**: Raw data ingestion from external sources
 
-## Directory layout (current)
+**Sources**:
+- SEC EDGAR API (companyfacts JSON)
+- Stooq (historical stock prices CSV)
 
-- `data/bronze/sec/`
-  - `company_tickers.json` : SEC company ticker ↔ CIK mapping
-  - `company_tickers.json.meta.json` : provenance for the file
-  - `companyfacts/CIK##########.json` : SEC XBRL Company Facts (raw)
-  - `companyfacts/CIK##########.json.meta.json`
-  - `submissions/CIK##########.json` : SEC submissions feed (raw, optional)
-  - `submissions/CIK##########.json.meta.json`
+**Output**: `data/bronze/out/sec/`, `data/bronze/out/stooq/`
 
-### SEC: companyfacts
-Raw response from SEC XBRL **Company Facts** API.
-Provides time-series fundamentals by XBRL tag (e.g., us-gaap CFO, revenue, capex, shares) with period end, filing date, form (10-Q/10-K), and value.
+## Silver Layer
 
-### SEC: submissions
-Raw response from SEC **Submissions** API.
-Provides the company’s filing index (forms, filing dates, accession numbers, report dates, document links). Useful to validate completeness and enforce point-in-time backtests.
+**Purpose**: Normalize raw data into consistent quarterly metrics
 
-- `data/bronze/stooq/daily/`
-  - `<ticker>.us.csv` : daily OHLCV prices from Stooq (raw)
-  - `<ticker>.us.csv.meta.json`
+**Key Features**:
+1. **YTD → Quarterly conversion**: Cumulative to discrete quarters
+2. **TTM calculation**: Rolling 4-quarter sum
+3. **Fiscal year handling**: Company-specific fiscal year ends
+4. **Shares normalization**: Actual count (not millions)
+5. **PIT history**: All historical values for backtesting
 
-## Metadata sidecar (`*.meta.json`)
-Minimum recommended fields:
-- `source` (e.g., "sec", "stooq")
-- `url`
-- `fetched_at_utc`
-- `status_code`
-- `nbytes`
+**Outputs**:
+- `companies.parquet`: Company metadata (ticker, cik, FYE)
+- `metrics_quarterly.parquet`: Latest quarterly metrics (CFO, CAPEX, SHARES)
+- `metrics_quarterly_history.parquet`: Historical (PIT) metrics
+- `prices_daily.parquet`: Daily stock prices
 
-## Update workflow
-- Use `data/bronze/update.py` to fetch/refresh Bronze data.
+**Metric Specifications** (`silver/config/metric_specs.py`):
+```python
+METRIC_SPECS = {
+    'CFO': {...},      # Cash from operations
+    'CAPEX': {...},    # Capital expenditures (6 tags for different industries)
+    'SHARES': {...},   # Diluted shares outstanding
+}
 ```
-python data/bronze/update.py \
-  --tickers GOOGL MSFT META \
-  --refresh-days 30 \
-  --include-submissions
+
+**See [silver/README.md](silver/README.md) for details.**
+
+## Gold Layer
+
+**Purpose**: Build analytical panels by joining Silver datasets
+
+**Output**:
 ```
-or use a file containing the tickers
+valuation_panel.parquet
+Columns: [end, capex_q, capex_ttm, cfo_q, cfo_ttm, shares_q,
+          filed, ticker, date, price, market_cap]
 ```
-python data/bronze/update.py \
-  --tickers-file tickers_example.txt \
-  --refresh-days 30 \
-  --include-submissions
-```
-- Add new sources only by extending the pipeline (not manual file drops).
 
-## Layer: Silver (normalized tables)
+**Panel Construction**:
+1. Load Silver datasets (metrics, companies, prices)
+2. Pivot metrics to wide format (one row per company-quarter)
+3. Join with stock prices (using `filed` date for PIT)
+4. Validate schema and constraints
 
-**Purpose**
-- Convert Bronze raw snapshots into analysis-ready tables (Parquet).
-- Keep minimal fields for valuation and backtesting (includes `filed` for PIT).
+**See [gold/README.md](gold/README.md) for details.**
 
-**Current outputs**
-- `data/silver/sec/companies.parquet`
-  - Company mappings (ticker ↔ CIK) with fiscal year end (`fye_mmdd`) from submissions.
-- `data/silver/sec/facts_long.parquet`
-  - Minimal long-format facts extracted from SEC companyfacts (CFO, CAPEX, shares).
-  - Includes `fiscal_year` calculated from company's FYE (not companyfacts `fy`).
-- `data/silver/sec/metrics_quarterly.parquet`
-  - Quarterly discrete values (`q_val`) derived from YTD facts + rolling TTM (`ttm_val`).
-  - Uses `fiscal_year` (not `fy`) for grouping to avoid comparative period mixing.
-  - Convention: CAPEX is stored as absolute value (>= 0).
-- `data/silver/stooq/prices_daily.parquet`
-  - Daily OHLCV prices normalized from Stooq CSV.
+## Data Quality
 
-**Update workflow**
-- Build/refresh: `python -m data.silver.build`
-- Validate: `python -m data.silver.validate`
+### Silver Validations
+1. Schema compliance (types, nullability)
+2. Primary key uniqueness
+3. YTD identity (Q1+Q2+Q3+Q4 ≈ Q4_ytd)
+4. Fiscal year consistency
+
+### Gold Validations
+1. Schema compliance
+2. Required fields (no NaN in critical columns)
+3. Date alignment (filed ≤ date)
+
+### Known Limitations
+- **Restatements**: Silver includes all historical values; Gold uses latest filed
+- **Financial services**: No CAPEX data (different valuation approach)

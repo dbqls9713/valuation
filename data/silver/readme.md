@@ -1,4 +1,4 @@
-# Silver Layer: Refactored Architecture
+# Silver Layer: Data Normalization and Transformation
 
 Clean, normalized, analysis-ready tables with extensible and maintainable structure.
 
@@ -31,28 +31,6 @@ data/silver/
 │
 └── build.py                # CLI entry point
 ```
-
-## 🚀 Usage
-
-### Build all sources
-```bash
-python -m data.silver.build
-```
-
-### Build specific sources
-```bash
-python -m data.silver.build --sources sec
-python -m data.silver.build --sources stooq
-python -m data.silver.build --sources sec stooq
-```
-
-### Custom paths
-```bash
-python -m data.silver.build \
-  --bronze-dir data/bronze/out \
-  --silver-dir data/silver_out
-```
-
 ### Run validation
 ```bash
 # Basic validation
@@ -224,50 +202,3 @@ class CustomValidator(Validator):
         # Custom validation logic
         return ValidationResult(is_valid=len(errors)==0, errors=errors)
 ```
-
-## 🐛 Troubleshooting
-
-**ytd_identity validation fails:**
-- Check if all quarters use same `fy` value
-- Verify larger YTD values are selected
-- Ensure Q labels preferred over FY for same end
-
-**Negative CAPEX:**
-- Means Q2_ytd < Q1_ytd (inconsistent versions)
-- Check deduplication logic
-
-**Debug specific case:**
-```python
-facts = pd.read_parquet('data/silver_out/sec/facts_long.parquet')
-problem = facts[
-    (facts['cik10'] == 'CIK') &
-    (facts['metric'] == 'METRIC') &
-    (facts['fiscal_year'] == YEAR)
-].sort_values('end')
-print(problem[['end', 'fp', 'fy', 'filed', 'val']])
-```
-
-## 📝 TODO
-
-- [ ] Fix YTD identity validation failures (16/571 rows)
-- [ ] Add unit tests
-- [ ] Add integration tests
-- [ ] Performance benchmarks
-- [ ] Parallel processing support
-- [ ] Incremental builds
-- [ ] Data lineage tracking
-- [ ] Create manual fixture data for regression testing
-  - Create `data/validation/sec_fixture.csv` with manually verified samples
-  - Include diverse cases: calendar vs fiscal year, restatements, edge cases
-  - Integrate into `validate.py` with `--with-fixture` flag
-  - Prevents silent degradation from code changes
-
-## 🎉 Summary
-
-New architecture provides:
-- ✅ More data extraction (+12-14%)
-- ✅ Clear structure and separation of concerns
-- ✅ Improved testability
-- ✅ Easy extensibility
-- ✅ Better error handling
-- ✅ Enhanced logging and monitoring
