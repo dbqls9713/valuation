@@ -83,6 +83,49 @@ python -m valuation.analysis.plot_prices \
 discount × terminal × n_years). Common policies shown in subtitle,
 differences in legend.*
 
+## DCF Model
+
+This framework implements a **two-stage discounted cash flow (DCF) model**
+based on Owner Earnings to estimate intrinsic value per share.
+
+### Methodology
+
+#### Stage 1: Explicit Forecast Period (N years)
+
+- Projects Owner Earnings (OE = CFO - CAPEX) with declining growth rates
+- Accounts for share buybacks/dilution
+- Discounts each year's OE per share to present value
+
+#### Stage 2: Terminal Value
+
+- Applies Gordon Growth Model for perpetual growth beyond forecast period
+- Assumes stable, low terminal growth rate (typically 2-3%)
+
+### Key Formula
+
+```text
+IV = Σ(OEPS_t / (1+r)^t) + TV / (1+r)^N
+
+Where:
+  OEPS_t = Owner Earnings per Share in year t
+  r = Discount rate (required return)
+  TV = Terminal Value using Gordon Growth
+  N = Forecast period length
+```
+
+### Key Assumptions
+
+- **Cash flow proxy**: Owner Earnings (CFO - CAPEX) instead of Free Cash Flow
+- **Growth path**: Initial growth rate that fades linearly to terminal rate
+- **Share dynamics**: Incorporates historical buyback/dilution rates
+- **Multiple scenarios**: Policy-based architecture allows testing different
+  assumptions
+
+For theoretical background, see
+[Discounted Cash Flow (Wikipedia)](https://en.wikipedia.org/wiki/Discounted_cash_flow).
+The DCF method has been used since the 1800s and was formally established by
+Irving Fisher (1930) and John Burr Williams (1938).
+
 ## Architecture
 
 ### Data Pipeline (Bronze → Silver → Gold)
