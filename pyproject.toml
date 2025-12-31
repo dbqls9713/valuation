@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "valuation"
+version = "0.1.0"
+description = "Company valuation framework with DCF analysis"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas==2.1.4",
+    "numpy>=1.24.0",
+    "matplotlib==3.10.1",
+    "requests==2.31.0",
+    "pandas-datareader==0.10.0",
+    "pyarrow==14.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pylint>=3.0",
+    "mypy>=1.0",
+    "yapf>=0.40",
+    "pre-commit>=3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["valuation*", "data*"]
+
+[tool.pytest.ini_options]
+testpaths = ["valuation", "data"]
+python_files = ["*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--cov=valuation.engine",
+    "--cov=valuation.policies",
+    "--cov=valuation.domain",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=90",
+    "-v",
+]
+
+[tool.coverage.run]
+source = ["valuation.engine", "valuation.policies", "valuation.domain"]
+omit = [
+    "*/test*.py",
+    "*/__pycache__/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]

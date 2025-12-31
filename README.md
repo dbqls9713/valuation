@@ -1,16 +1,29 @@
 # DCF Valuation Framework
 
-Production-grade DCF valuation framework with ETL pipeline, policy-based architecture, and backtesting capabilities.
+Production-grade DCF valuation framework with ETL pipeline, policy-based
+architecture, and backtesting capabilities.
 
-> **Disclaimer**: This is a valuation tool for research and analysis purposes. Investment decisions are the sole responsibility of the investor. This tool does not constitute financial advice.
+> **Disclaimer**: This is a valuation tool for research and analysis purposes.
+> Investment decisions are the sole responsibility of the investor. This tool
+> does not constitute financial advice.
 
 ## Requirements
-python >= 3.12
+
+- Python >= 3.9 (tested with 3.12)
+- Dependencies managed via `pyproject.toml`
+
+### Installation
 
 ```bash
+# Create virtual environment
 python3.12 -m venv venv
 source venv/bin/activate
-pip install -r requirements.in
+
+# Production (runtime dependencies only)
+pip install -e .
+
+# Development (includes pytest, linting tools, etc.)
+pip install -e ".[dev]"
 ```
 
 ## Quick Start
@@ -66,13 +79,15 @@ python -m valuation.analysis.plot_prices \
 
 ![MSFT Scenario Comparison](example/charts/MSFT__comparison__12scenarios_e64025ed.png)
 
-*Figure: MSFT intrinsic value across 12 scenarios (2×2×3 grid: discount × terminal × n_years). Common policies shown in subtitle, differences in legend.*
+*Figure: MSFT intrinsic value across 12 scenarios (2×2×3 grid:
+discount × terminal × n_years). Common policies shown in subtitle,
+differences in legend.*
 
 ## Architecture
 
 ### Data Pipeline (Bronze → Silver → Gold)
 
-```
+```text
 Bronze (Raw)         Silver (Normalized)      Gold (Analytical)
 ├─ SEC filings    →  ├─ metrics_quarterly  →  └─ valuation_panel
 └─ Stock prices      └─ companies
@@ -80,7 +95,7 @@ Bronze (Raw)         Silver (Normalized)      Gold (Analytical)
 
 ### Valuation Framework
 
-```
+```text
 Domain Types (FundamentalsSlice, MarketSlice)
        ↓
 Policies (CAPEX, Growth, Fade, Shares, Terminal, Discount)
@@ -92,7 +107,7 @@ ValuationResult (IV, diagnostics)
 
 ## Project Structure
 
-```
+```text
 valuation/
 ├── README.md              # This file
 ├── PROJECT_STRUCTURE.md   # Detailed structure
@@ -143,9 +158,11 @@ valuation/
 
 ## Data Coverage
 
-**Supported**: 31 tickers across industries (Tech, Consumer, Industrial, Healthcare, Energy, Materials, Telecom, Retail)
+**Supported**: 31 tickers across industries (Tech, Consumer, Industrial,
+Healthcare, Energy, Materials, Telecom, Retail)
 
-**Not supported**: Financial services (Banks, Insurance) - different valuation approach needed
+**Not supported**: Financial services (Banks, Insurance) - different
+valuation approach needed
 
 ## Configuration
 
@@ -166,11 +183,16 @@ config = ScenarioConfig(
 
 ## Documentation
 
-- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)**: Complete project structure and entry points
-- **[data/README.md](data/README.md)**: ETL pipeline details (Bronze/Silver/Gold)
-- **[valuation/README.md](valuation/README.md)**: Valuation framework and policies
-- **[valuation/analysis/README.md](valuation/analysis/README.md)**: Analysis tools usage
-- **[scenarios/README.md](scenarios/README.md)**: Scenario configuration and grid search
+- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)**: Complete project
+  structure and entry points
+- **[data/README.md](data/README.md)**: ETL pipeline details
+  (Bronze/Silver/Gold)
+- **[valuation/README.md](valuation/README.md)**: Valuation framework
+  and policies
+- **[valuation/analysis/README.md](valuation/analysis/README.md)**:
+  Analysis tools usage
+- **[scenarios/README.md](scenarios/README.md)**: Scenario configuration
+  and grid search
 
 ## Development
 
@@ -191,11 +213,3 @@ yapf, pylint, mypy
 # Run manually
 pre-commit run --all-files
 ```
-
-## Requirements
-
-```bash
-pip install pandas pyarrow pyyaml matplotlib requests
-```
-
-See `requirements.in` for exact versions.
