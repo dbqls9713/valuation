@@ -69,8 +69,7 @@ def calculate_iv_for_date(
 
   oe0 = fundamentals.latest_cfo_ttm - capex_result.value
 
-  growth_result = policies['growth'].compute(
-      fundamentals, policies['capex'])
+  growth_result = policies['growth'].compute(fundamentals, policies['capex'])
   if pd.isna(growth_result.value):
     return None
 
@@ -104,8 +103,8 @@ def calculate_iv_for_date(
 
   if not pd.isna(iv) and iv > 0:
     try:
-      market_slice = get_price_after_filing(
-          ticker, fundamentals.latest_filed, silver_dir)
+      market_slice = get_price_after_filing(ticker, fundamentals.latest_filed,
+                                            silver_dir)
       market_price = market_slice.price
     except (FileNotFoundError, ValueError):
       market_price = None
@@ -140,10 +139,8 @@ def plot_capex_comparison(
     return
 
   ticker_panel = ticker_panel.sort_values('end')
-  ticker_panel = ticker_panel[
-      (ticker_panel['end'] >= start_date) &
-      (ticker_panel['end'] <= end_date)
-  ]
+  ticker_panel = ticker_panel[(ticker_panel['end'] >= start_date) &
+                              (ticker_panel['end'] <= end_date)]
 
   if len(ticker_panel) < 4:
     logger.warning('Insufficient data for %s', ticker)
@@ -167,19 +164,17 @@ def plot_capex_comparison(
   logger.info('Calculating IVs for %d quarter-ends...', len(quarter_ends))
 
   for as_of_date in quarter_ends:
-    result_raw = calculate_iv_for_date(
-        panel, ticker, as_of_date, scenarios['raw'], silver_dir)
-    result_weighted = calculate_iv_for_date(
-        panel, ticker, as_of_date, scenarios['weighted'], silver_dir)
-    result_clipped = calculate_iv_for_date(
-        panel, ticker, as_of_date, scenarios['clipped'], silver_dir)
+    result_raw = calculate_iv_for_date(panel, ticker, as_of_date,
+                                       scenarios['raw'], silver_dir)
+    result_weighted = calculate_iv_for_date(panel, ticker, as_of_date,
+                                            scenarios['weighted'], silver_dir)
+    result_clipped = calculate_iv_for_date(panel, ticker, as_of_date,
+                                           scenarios['clipped'], silver_dir)
 
     if result_raw and result_weighted and result_clipped:
-      market_price = (
-          result_weighted['market_price'] or
-          result_raw['market_price'] or
-          result_clipped['market_price']
-      )
+      market_price = (result_weighted['market_price'] or
+                      result_raw['market_price'] or
+                      result_clipped['market_price'])
 
       if market_price:
         results['dates'].append(as_of_date)
@@ -229,11 +224,10 @@ def plot_capex_comparison(
 
   ax.set_xlabel('Quarter End Date', fontsize=12, fontweight='bold')
   ax.set_ylabel('Price per Share ($)', fontsize=12, fontweight='bold')
-  ax.set_title(
-      f'{ticker} - Intrinsic Value by CAPEX Method vs Market Price',
-      fontsize=14,
-      fontweight='bold',
-      pad=20)
+  ax.set_title(f'{ticker} - Intrinsic Value by CAPEX Method vs Market Price',
+               fontsize=14,
+               fontweight='bold',
+               pad=20)
   ax.legend(loc='best', fontsize=11, framealpha=0.9)
   ax.grid(True, alpha=0.3, linestyle='--')
 
@@ -245,14 +239,12 @@ def plot_capex_comparison(
   first_year = results['dates'][0].year
   last_year = results['dates'][-1].year
 
-  stats_text = (
-      f'Average ({first_year}-{last_year}):\n'
-      f'  Raw IV:      ${avg_iv_raw:.2f}\n'
-      f'  Weighted IV: ${avg_iv_weighted:.2f}\n'
-      f'  Clipped IV:  ${avg_iv_clipped:.2f}\n'
-      f'  Market:      ${avg_market:.2f}\n'
-      f'  Price/IV (Weighted): {avg_market/avg_iv_weighted:.1%}'
-  )
+  stats_text = (f'Average ({first_year}-{last_year}):\n'
+                f'  Raw IV:      ${avg_iv_raw:.2f}\n'
+                f'  Weighted IV: ${avg_iv_weighted:.2f}\n'
+                f'  Clipped IV:  ${avg_iv_clipped:.2f}\n'
+                f'  Market:      ${avg_market:.2f}\n'
+                f'  Price/IV (Weighted): {avg_market/avg_iv_weighted:.1%}')
 
   ax.text(0.02,
           0.98,
@@ -307,7 +299,7 @@ Examples:
                       help='End date (YYYY-MM-DD)')
   parser.add_argument('--output-dir',
                       type=Path,
-                      default=Path('backtest/capex_comparison'),
+                      default=Path('output/analysis/price_charts'),
                       help='Output directory for charts')
   parser.add_argument('--gold-path',
                       type=Path,
@@ -317,7 +309,9 @@ Examples:
                       type=Path,
                       default=Path('data/silver/out'),
                       help='Path to Silver directory')
-  parser.add_argument('--verbose', '-v', action='store_true',
+  parser.add_argument('--verbose',
+                      '-v',
+                      action='store_true',
                       help='Verbose output')
 
   args = parser.parse_args()
@@ -334,7 +328,8 @@ Examples:
 
     with open(args.tickers_file, 'r', encoding='utf-8') as f:
       tickers = [
-          line.strip() for line in f
+          line.strip()
+          for line in f
           if line.strip() and not line.strip().startswith('#')
       ]
 

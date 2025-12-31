@@ -10,6 +10,15 @@ ETL pipeline for financial data processing with medallion architecture.
 - SEC EDGAR API (companyfacts JSON)
 - Stooq (historical stock prices CSV)
 
+**Example**:
+```bash
+python -m data.bronze.update --tickers AAPL GOOGL
+```
+or
+```bash
+python -m data.bronze.update --tickers-file data/tickers_example.txt
+```
+
 **Output**: `data/bronze/out/sec/`, `data/bronze/out/stooq/`
 
 ## Silver Layer

@@ -242,7 +242,7 @@ def main():
   )
   parser.add_argument('--output',
                       type=str,
-                      default='backtest_results.csv',
+                      default='output/analysis/backtest_results.csv',
                       help='Output')
   parser.add_argument(
       '--gold-path',

@@ -232,24 +232,24 @@ This design is efficient because:
 
 ---
 
-## CAPEX Method Comparison
+## Scenario Comparison with
 
-Compare intrinsic values calculated with different CAPEX methods over time.
+Plot prices and intrinsic values for a given ticker over time.
 
 ### Quick Start
 
 ```bash
 # Basic usage
-python -m valuation.analysis.compare_capex \
+python -m valuation.analysis.plot_prices \
     --tickers AAPL GOOGL META MSFT
 
 # From ticker file
-python -m valuation.analysis.compare_capex \
+python -m valuation.analysis.plot_prices \
     --tickers-file data/bronze/tickers_dow30.txt \
     --start-date 2020-01-01
 
 # Custom output directory
-python -m valuation.analysis.compare_capex \
+python -m valuation.analysis.plot_prices \
     --tickers AAPL GOOGL \
     --output-dir charts/capex_analysis
 ```

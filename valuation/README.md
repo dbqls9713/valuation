@@ -16,7 +16,7 @@ valuation/
 │   ├── terminal.py # GordonTerminal
 │   └── discount.py # FixedRate
 ├── scenarios/      # ScenarioConfig + policy registry
-├── backtest/       # BacktestRunner + metrics
+├── analysis/       # AnalysisRunner + metrics
 └── run.py          # Single valuation entrypoint
 ```
 
