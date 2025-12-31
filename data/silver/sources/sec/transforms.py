@@ -44,15 +44,16 @@ class SECFactsTransformer:
       out = out.groupby(group_cols, as_index=False).tail(1)
       return out.reset_index(drop=True)
 
-    # Filter out comparative statements: keep only fy == fiscal_year
-    df = df[df['fy'] == df['fiscal_year']].copy()
-
     if keep_all_versions:
       # For PIT: keep all unique (end, fp, filed) combinations
+      # Don't filter by fy == fiscal_year to preserve historical restatements
       # Remove exact duplicates but preserve different filing dates
       return df.drop_duplicates(
           subset=['cik10', 'metric', 'end', 'fp',
                   'filed'], keep='last').reset_index(drop=True)
+
+    # Filter out comparative statements: keep only fy == fiscal_year
+    df = df[df['fy'] == df['fiscal_year']].copy()
 
     # Original logic: keep only latest filed version
     out_parts: list[pd.DataFrame] = []
@@ -82,6 +83,7 @@ class SECFactsTransformer:
       return pd.DataFrame(columns=df.columns)
 
     return pd.concat(non_empty, ignore_index=True).reset_index(drop=True)
+
 
 class SECMetricsBuilder:
   """Build quarterly metrics from facts."""

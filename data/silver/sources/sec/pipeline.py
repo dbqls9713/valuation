@@ -61,24 +61,26 @@ class SECPipeline(Pipeline):
       self.datasets['metrics_quarterly_history'] = pd.DataFrame()
       return
 
-    facts = self.transformer.add_fiscal_year(facts, companies)
-    facts = self.transformer.deduplicate(facts)
+    # Add fiscal year to all facts
+    facts_with_fy = self.transformer.add_fiscal_year(facts, companies)
 
-    self.datasets['facts_long'] = facts
+    # Create two versions:
+    # 1. Latest version only (for current valuation)
+    facts_latest = self.transformer.deduplicate(facts_with_fy,
+                                                keep_all_versions=False)
+    self.datasets['facts_long'] = facts_latest
 
-    # Build metrics
-    metrics_q_all = self.metrics_builder.build(facts)
+    # 2. All versions (for PIT backtest)
+    facts_all_versions = self.transformer.deduplicate(facts_with_fy,
+                                                      keep_all_versions=True)
 
-    # Generate both versions
-    # 1. Latest version (for current valuation)
-    metrics_q_latest = self.transformer.deduplicate(metrics_q_all,
-                                                    keep_all_versions=False)
+    # Build metrics from latest version
+    metrics_q_latest = self.metrics_builder.build(facts_latest)
     self.datasets['metrics_quarterly'] = metrics_q_latest
 
-    # 2. History version (for PIT backtest)
-    metrics_q_history = self.transformer.deduplicate(metrics_q_all,
-                                                     keep_all_versions=True)
-    self.datasets['metrics_quarterly_history'] = metrics_q_history
+    # Build metrics from all versions (for PIT)
+    metrics_q_all_versions = self.metrics_builder.build(facts_all_versions)
+    self.datasets['metrics_quarterly_history'] = metrics_q_all_versions
 
   def validate(self) -> None:
     """Run validation checks."""

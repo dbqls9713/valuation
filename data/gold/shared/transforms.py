@@ -25,51 +25,44 @@ def pivot_metrics_wide(
     Wide-format DataFrame with columns like cfo_q, cfo_ttm, capex_q, etc.
 
   Note:
-    Filed date is consolidated using max() across all metrics for each
-    (cik10, end) combination.
+    For PIT support, each unique (cik10, end, filed) combination is preserved.
+    This allows multiple versions of the same quarter end to coexist.
   """
   if metrics:
     metrics_q = metrics_q[metrics_q['metric'].isin(metrics)].copy()
 
   metric_list = metrics_q['metric'].unique()
   if len(metric_list) == 0:
-    return pd.DataFrame(columns=['cik10', 'end'])
+    return pd.DataFrame(columns=['cik10', 'end', 'filed'])
 
   parts = []
   for metric in metric_list:
     m = metrics_q[metrics_q['metric'] == metric].copy()
 
+    # Include 'filed' in index to preserve all versions for PIT
     m_wide = m.pivot_table(
-        index=['cik10', 'end'],
-        values=['q_val', 'ttm_val', 'filed'],
+        index=['cik10', 'end', 'filed'],
+        values=['q_val', 'ttm_val'],
         aggfunc={
             'q_val': 'first',
             'ttm_val': 'first',
-            'filed': 'max',
         },
     ).reset_index()
 
     metric_lower = metric.lower()
-    m_wide = m_wide.rename(
-        columns={
-            'q_val': f'{metric_lower}_q',
-            'ttm_val': f'{metric_lower}_ttm',
-            'filed': f'{metric_lower}_filed',
-        })
+    m_wide = m_wide.rename(columns={
+        'q_val': f'{metric_lower}_q',
+        'ttm_val': f'{metric_lower}_ttm',
+    })
 
     parts.append(m_wide)
 
   result = parts[0]
   for part in parts[1:]:
-    result = result.merge(part, on=['cik10', 'end'], how='outer')
+    result = result.merge(part, on=['cik10', 'end', 'filed'], how='outer')
 
-  filed_cols = [c for c in result.columns if c.endswith('_filed')]
-  if not filed_cols:
-    return result  # type: ignore[no-any-return]
-
-  result['filed'] = result[filed_cols].max(axis=1)
-  result = result.drop(columns=filed_cols)
   return result  # type: ignore[no-any-return]
+
 
 def join_prices_pit(
     metrics_wide: pd.DataFrame,
@@ -123,6 +116,7 @@ def join_prices_pit(
     return pd.DataFrame(columns=cols)
 
   return pd.concat(panel_parts, ignore_index=True)
+
 
 def calculate_market_cap(
     panel: pd.DataFrame,

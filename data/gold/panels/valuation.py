@@ -60,11 +60,24 @@ class ValuationPanelBuilder:
       Wide-format panel DataFrame
     """
     companies = pd.read_parquet(self.silver_dir / 'sec' / 'companies.parquet')
+    # Use metrics_quarterly_history for PIT support (all filed versions)
     metrics_q = pd.read_parquet(self.silver_dir / 'sec' /
-                                'metrics_quarterly.parquet')
+                                'metrics_quarterly_history.parquet')
     prices = pd.read_parquet(self.silver_dir / 'stooq' / 'prices_daily.parquet')
 
     metrics_wide = pivot_metrics_wide(metrics_q, metrics=self.REQUIRED_METRICS)
+
+    # Forward fill CFO and CAPEX within each (cik10, end) group
+    # This handles cases where SHARES has multiple filed versions
+    # but CFO/CAPEX only have one version
+    for cik in metrics_wide['cik10'].unique():
+      cik_mask = metrics_wide['cik10'] == cik
+      for end_date in metrics_wide[cik_mask]['end'].unique():
+        end_mask = (metrics_wide['end'] == end_date) & cik_mask
+        group = metrics_wide[end_mask].sort_values('filed')
+        for col in ['cfo_q', 'cfo_ttm', 'capex_q', 'capex_ttm']:
+          if col in metrics_wide.columns:
+            metrics_wide.loc[end_mask, col] = group[col].ffill().values
 
     metrics_wide = self._filter_complete_rows(metrics_wide)
 
@@ -124,7 +137,7 @@ class ValuationPanelBuilder:
         output_path,
         inputs=[
             self.silver_dir / 'sec' / 'companies.parquet',
-            self.silver_dir / 'sec' / 'metrics_quarterly.parquet',
+            self.silver_dir / 'sec' / 'metrics_quarterly_history.parquet',
             self.silver_dir / 'stooq' / 'prices_daily.parquet',
         ],
         metadata={
