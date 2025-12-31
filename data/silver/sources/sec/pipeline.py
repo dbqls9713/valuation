@@ -58,29 +58,19 @@ class SECPipeline(Pipeline):
     if facts.empty:
       self.datasets['facts_long'] = pd.DataFrame()
       self.datasets['metrics_quarterly'] = pd.DataFrame()
-      self.datasets['metrics_quarterly_history'] = pd.DataFrame()
       return
 
     # Add fiscal year to all facts
     facts_with_fy = self.transformer.add_fiscal_year(facts, companies)
 
-    # Create two versions:
-    # 1. Latest version only (for current valuation)
-    facts_latest = self.transformer.deduplicate(facts_with_fy,
-                                                keep_all_versions=False)
-    self.datasets['facts_long'] = facts_latest
-
-    # 2. All versions (for PIT backtest)
+    # All versions for PIT support
     facts_all_versions = self.transformer.deduplicate(facts_with_fy,
                                                       keep_all_versions=True)
+    self.datasets['facts_long'] = facts_all_versions
 
-    # Build metrics from latest version
-    metrics_q_latest = self.metrics_builder.build(facts_latest)
-    self.datasets['metrics_quarterly'] = metrics_q_latest
-
-    # Build metrics from all versions (for PIT)
-    metrics_q_all_versions = self.metrics_builder.build(facts_all_versions)
-    self.datasets['metrics_quarterly_history'] = metrics_q_all_versions
+    # Build metrics from all versions
+    metrics_q = self.metrics_builder.build(facts_all_versions)
+    self.datasets['metrics_quarterly'] = metrics_q
 
   def validate(self) -> None:
     """Run validation checks."""
@@ -97,14 +87,9 @@ class SECPipeline(Pipeline):
     self.out_dir.mkdir(parents=True, exist_ok=True)
 
     datasets_to_write = {
-        'companies':
-            self.datasets.get('companies'),
-        'facts_long':
-            self.datasets.get('facts_long'),
-        'metrics_quarterly':
-            self.datasets.get('metrics_quarterly'),
-        'metrics_quarterly_history':
-            self.datasets.get('metrics_quarterly_history'),
+        'companies': self.datasets.get('companies'),
+        'facts_long': self.datasets.get('facts_long'),
+        'metrics_quarterly': self.datasets.get('metrics_quarterly'),
     }
 
     cf_files = self._get_companyfact_files()

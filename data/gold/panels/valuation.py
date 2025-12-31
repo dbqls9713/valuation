@@ -60,9 +60,9 @@ class ValuationPanelBuilder:
       Wide-format panel DataFrame
     """
     companies = pd.read_parquet(self.silver_dir / 'sec' / 'companies.parquet')
-    # Use metrics_quarterly_history for PIT support (all filed versions)
+    # metrics_quarterly includes all filed versions for PIT support
     metrics_q = pd.read_parquet(self.silver_dir / 'sec' /
-                                'metrics_quarterly_history.parquet')
+                                'metrics_quarterly.parquet')
     prices = pd.read_parquet(self.silver_dir / 'stooq' / 'prices_daily.parquet')
 
     metrics_wide = pivot_metrics_wide(metrics_q, metrics=self.REQUIRED_METRICS)
@@ -137,7 +137,7 @@ class ValuationPanelBuilder:
         output_path,
         inputs=[
             self.silver_dir / 'sec' / 'companies.parquet',
-            self.silver_dir / 'sec' / 'metrics_quarterly_history.parquet',
+            self.silver_dir / 'sec' / 'metrics_quarterly.parquet',
             self.silver_dir / 'stooq' / 'prices_daily.parquet',
         ],
         metadata={

@@ -47,8 +47,10 @@ class SECFactsTransformer:
     if keep_all_versions:
       # For PIT: keep all unique (end, fp, filed) combinations
       # Don't filter by fy == fiscal_year to preserve historical restatements
+      # But filter out invalid data (fy=0 or empty fp)
+      valid = df[(df['fy'] > 0) & (df['fp'] != '')].copy()
       # Remove exact duplicates but preserve different filing dates
-      return df.drop_duplicates(
+      return valid.drop_duplicates(
           subset=['cik10', 'metric', 'end', 'fp',
                   'filed'], keep='last').reset_index(drop=True)
 
