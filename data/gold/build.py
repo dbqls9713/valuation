@@ -13,11 +13,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from data.gold.panels import ValuationPanelBuilder
+from data.gold.panels.valuation import ValuationPanelBuilder
 
 logger = logging.getLogger(__name__)
 
 AVAILABLE_PANELS = ['valuation']
+
 
 def build_panels(
     panels: list[str],
@@ -67,6 +68,7 @@ def build_panels(
     logger.info('%s', builder.summary())
     logger.debug('Sample:\n%s', panel.head(5).to_string(index=False))
 
+
 def main() -> None:
   """CLI entrypoint."""
   parser = argparse.ArgumentParser(description='Build Gold layer panels')
@@ -110,6 +112,7 @@ def main() -> None:
       min_date=args.min_date,
       validate=not args.no_validate,
   )
+
 
 if __name__ == '__main__':
   logging.basicConfig(
