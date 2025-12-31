@@ -26,6 +26,7 @@ from typing import Optional
 
 import pandas as pd
 
+from valuation.data_loader import ValuationDataLoader
 from valuation.domain.types import FundamentalsSlice
 from valuation.domain.types import MarketSlice
 from valuation.domain.types import PreparedInputs
@@ -36,63 +37,11 @@ from valuation.scenarios.registry import create_policies
 
 logger = logging.getLogger(__name__)
 
-def load_gold_panel(gold_path: Path) -> pd.DataFrame:
-  """Load and prepare Gold panel data."""
-  if not gold_path.exists():
-    raise FileNotFoundError(f'Gold panel not found: {gold_path}. '
-                            'Run "python -m data.gold.build" first.')
-
-  panel = pd.read_parquet(gold_path)
-  panel['end'] = pd.to_datetime(panel['end'])
-  panel['filed'] = pd.to_datetime(panel['filed'])
-  return panel
-
-def adjust_for_splits(panel: pd.DataFrame) -> pd.DataFrame:
-  """
-  Adjust shares for stock splits across all tickers.
-
-  Must be applied before PIT filtering to ensure historical shares
-  are on the same basis as current prices.
-  """
-  adjusted_parts = []
-
-  for ticker in panel['ticker'].unique():
-    ticker_data = panel[panel['ticker'] == ticker].copy()
-    ticker_data = ticker_data.sort_values('end')
-
-    shares_missing = ('shares_q' not in ticker_data.columns or
-                      ticker_data['shares_q'].isna().all())
-    if shares_missing:
-      adjusted_parts.append(ticker_data)
-      continue
-
-    ticker_data['shares_ratio'] = (ticker_data['shares_q'] /
-                                   ticker_data['shares_q'].shift(1))
-
-    splits = ticker_data[(ticker_data['shares_ratio'] > 2) |
-                         (ticker_data['shares_ratio'] < 0.5)].copy()
-
-    if not splits.empty:
-      for idx in splits.index[::-1]:
-        split_date = ticker_data.loc[idx, 'end']
-        split_ratio = ticker_data.loc[idx, 'shares_ratio']
-
-        mask = ticker_data['end'] < split_date
-        ticker_data.loc[mask, 'shares_q'] *= split_ratio
-
-        ticker_data['shares_ratio'] = (ticker_data['shares_q'] /
-                                       ticker_data['shares_q'].shift(1))
-
-    ticker_data = ticker_data.drop(columns=['shares_ratio'])
-    adjusted_parts.append(ticker_data)
-
-  result: pd.DataFrame = pd.concat(adjusted_parts, ignore_index=True)
-  return result
 
 def get_price_after_filing(
     ticker: str,
     filed_date: pd.Timestamp,
-    silver_dir: Path,
+    loader: ValuationDataLoader,
 ) -> MarketSlice:
   """
   Get market price on first trading day after filing date.
@@ -100,17 +49,12 @@ def get_price_after_filing(
   Args:
     ticker: Company ticker symbol
     filed_date: SEC filing date
-    silver_dir: Path to Silver layer output directory
+    loader: Data loader for accessing price data
 
   Returns:
     MarketSlice with price and date
   """
-  prices_path = silver_dir / 'stooq' / 'prices_daily.parquet'
-  if not prices_path.exists():
-    raise FileNotFoundError(f'Price data not found: {prices_path}')
-
-  prices = pd.read_parquet(prices_path)
-  prices['date'] = pd.to_datetime(prices['date'])
+  prices = loader.load_prices()
 
   symbol = f'{ticker}.US'
   ticker_prices = prices[prices['symbol'] == symbol].copy()
@@ -134,12 +78,12 @@ def get_price_after_filing(
   row = after_filing.iloc[0]
   return MarketSlice(price=float(row['close']), price_date=row['date'])
 
+
 def run_valuation(
     ticker: str,
     as_of_date: str,
+    loader: ValuationDataLoader,
     config: Optional[ScenarioConfig] = None,
-    gold_path: Path = Path('data/gold/out/valuation_panel.parquet'),
-    silver_dir: Path = Path('data/silver/out'),
     include_market_price: bool = True,
 ) -> ValuationResult:
   """
@@ -148,9 +92,8 @@ def run_valuation(
   Args:
     ticker: Company ticker symbol (e.g., 'GOOGL', 'AAPL')
     as_of_date: Point-in-time date for valuation (YYYY-MM-DD)
+    loader: Data loader for accessing panel and price data
     config: ScenarioConfig (default: ScenarioConfig.default())
-    gold_path: Path to Gold panel parquet file
-    silver_dir: Path to Silver layer output directory
     include_market_price: Whether to fetch and include market price
 
   Returns:
@@ -161,8 +104,7 @@ def run_valuation(
 
   as_of = pd.Timestamp(as_of_date)
 
-  panel = load_gold_panel(gold_path)
-  panel = adjust_for_splits(panel)
+  panel = loader.load_panel()
 
   data = FundamentalsSlice.from_panel(panel, ticker, as_of)
 
@@ -235,8 +177,7 @@ def run_valuation(
   market_slice = None
   if include_market_price:
     try:
-      market_slice = get_price_after_filing(ticker, data.latest_filed,
-                                            silver_dir)
+      market_slice = get_price_after_filing(ticker, data.latest_filed, loader)
       all_diag['price_date'] = str(market_slice.price_date.date())
     except (FileNotFoundError, ValueError) as e:
       all_diag['price_error'] = str(e)
@@ -257,6 +198,7 @@ def run_valuation(
       inputs=inputs,
       diag=all_diag,
   )
+
 
 def main() -> None:
   """CLI entrypoint."""
@@ -299,12 +241,16 @@ def main() -> None:
 
   config = scenario_map[args.scenario]()
 
+  loader = ValuationDataLoader(
+      gold_path=args.gold_path,
+      silver_dir=args.silver_dir,
+  )
+
   result = run_valuation(
       ticker=args.ticker,
       as_of_date=args.as_of,
+      loader=loader,
       config=config,
-      gold_path=args.gold_path,
-      silver_dir=args.silver_dir,
   )
 
   separator = '=' * 70
@@ -338,6 +284,7 @@ def main() -> None:
       logger.info('  Margin of Safety: %.2f%%', result.margin_of_safety * 100)
 
   logger.info('%s\n', separator)
+
 
 if __name__ == '__main__':
   logging.basicConfig(

@@ -41,11 +41,13 @@ import traceback
 
 import pandas as pd
 
+from valuation.data_loader import ValuationDataLoader
 from valuation.domain.types import ValuationResult
 from valuation.run import run_valuation
 from valuation.scenarios.config import ScenarioConfig
 
 logger = logging.getLogger(__name__)
+
 
 def _result_to_dict(
     ticker: str,
@@ -68,6 +70,7 @@ def _result_to_dict(
     row.update(result.diag)
 
   return row
+
 
 def batch_valuation(
     tickers: Sequence[str],
@@ -102,6 +105,9 @@ def batch_valuation(
   Raises:
     ValueError: If no successful results
   """
+  # Create cached data loader for efficiency (loads data once for all tickers)
+  loader = ValuationDataLoader(gold_path=gold_path, silver_dir=silver_dir)
+
   results = []
 
   for i, ticker in enumerate(tickers, 1):
@@ -112,9 +118,8 @@ def batch_valuation(
       result = run_valuation(
           ticker=ticker,
           as_of_date=as_of_date,
+          loader=loader,
           config=config,
-          gold_path=gold_path,
-          silver_dir=silver_dir,
           include_market_price=True,
       )
 
@@ -138,14 +143,17 @@ def batch_valuation(
 
   return pd.DataFrame(results)
 
+
 def _load_tickers_from_file(file_path: Path) -> list[str]:
   """Load ticker symbols from text file (one per line, # for comments)."""
   with open(file_path, 'r', encoding='utf-8') as f:
     tickers = [
-        line.strip() for line in f
+        line.strip()
+        for line in f
         if line.strip() and not line.strip().startswith('#')
     ]
   return tickers
+
 
 def _print_summary(df: pd.DataFrame) -> None:
   """Print summary statistics for batch valuation results."""
@@ -166,11 +174,9 @@ def _print_summary(df: pd.DataFrame) -> None:
     logger.info('Intrinsic Value:')
     logger.info('  Mean:   $%.2f', df['iv_per_share'].mean())
     logger.info('  Median: $%.2f', df['iv_per_share'].median())
-    logger.info('  Min:    $%.2f (%s)',
-                df['iv_per_share'].min(),
+    logger.info('  Min:    $%.2f (%s)', df['iv_per_share'].min(),
                 df.loc[df['iv_per_share'].idxmin(), 'ticker'])
-    logger.info('  Max:    $%.2f (%s)',
-                df['iv_per_share'].max(),
+    logger.info('  Max:    $%.2f (%s)', df['iv_per_share'].max(),
                 df.loc[df['iv_per_share'].idxmax(), 'ticker'])
     logger.info('')
 
@@ -186,8 +192,7 @@ def _print_summary(df: pd.DataFrame) -> None:
     logger.info('')
 
     undervalued = priced_df[priced_df['margin_of_safety'] > 0]
-    logger.info('Undervalued (MoS > 0): %d / %d (%.1f%%)',
-                len(undervalued),
+    logger.info('Undervalued (MoS > 0): %d / %d (%.1f%%)', len(undervalued),
                 has_price,
                 len(undervalued) / has_price * 100)
 
@@ -195,13 +200,12 @@ def _print_summary(df: pd.DataFrame) -> None:
       logger.info('Top 5 undervalued:')
       top5 = undervalued.nlargest(5, 'margin_of_safety')
       for _, row in top5.iterrows():
-        logger.info('  %s: IV=$%.2f, Price=$%.2f, MoS=%.1f%%',
-                    row['ticker'],
-                    row['iv_per_share'],
-                    row['market_price'],
+        logger.info('  %s: IV=$%.2f, Price=$%.2f, MoS=%.1f%%', row['ticker'],
+                    row['iv_per_share'], row['market_price'],
                     row['margin_of_safety'] * 100)
 
   logger.info('=' * 70)
+
 
 def main() -> None:
   """CLI entrypoint for batch valuation."""
@@ -259,14 +263,10 @@ def main() -> None:
 
   if args.tickers:
     tickers = args.tickers
-    logger.info('Processing %d tickers as of %s',
-                len(tickers),
-                args.as_of_date)
+    logger.info('Processing %d tickers as of %s', len(tickers), args.as_of_date)
   else:
     tickers = _load_tickers_from_file(args.tickers_file)
-    logger.info('Loaded %d tickers from %s',
-                len(tickers),
-                args.tickers_file)
+    logger.info('Loaded %d tickers from %s', len(tickers), args.tickers_file)
     logger.info('Processing as of %s', args.as_of_date)
 
   scenario_map = {
@@ -301,6 +301,7 @@ def main() -> None:
   logger.info('Saved %d results to %s', len(results), args.output)
 
   _print_summary(results)
+
 
 if __name__ == '__main__':
   main()

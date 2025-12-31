@@ -29,10 +29,12 @@ from typing import Optional
 import pandas as pd
 
 from valuation.analysis.backtest.metrics import compute_summary_stats
+from valuation.data_loader import ValuationDataLoader
 from valuation.run import run_valuation
 from valuation.scenarios.config import ScenarioConfig
 
 logger = logging.getLogger(__name__)
+
 
 class BacktestRunner:
   """
@@ -106,6 +108,12 @@ class BacktestRunner:
       - price_to_iv: Market / IV ratio
       - ... (all diagnostics)
     """
+    # Create cached data loader for efficiency (loads data once for all dates)
+    loader = ValuationDataLoader(
+        gold_path=self.gold_path,
+        silver_dir=self.silver_dir,
+    )
+
     quarters = self._generate_quarter_ends()
     results = []
 
@@ -123,9 +131,8 @@ class BacktestRunner:
           result = run_valuation(
               ticker=self.ticker,
               as_of_date=str(as_of.date()),
+              loader=loader,
               config=config,
-              gold_path=self.gold_path,
-              silver_dir=self.silver_dir,
           )
 
           row = result.to_dict()
@@ -163,6 +170,7 @@ class BacktestRunner:
       raise ValueError('No successful backtest results')
 
     return pd.DataFrame(results)
+
 
 def run_batch_backtest(
     tickers: list[str],
@@ -217,6 +225,7 @@ def run_batch_backtest(
     raise ValueError('No successful results for any ticker')
 
   return pd.concat(all_results, ignore_index=True)
+
 
 def main():
   """CLI entrypoint for backtest runner."""
@@ -280,6 +289,7 @@ def main():
   logger.info(separator)
   logger.info('\n%s', summary.to_string())
   logger.info('\nResults saved to: %s', args.output)
+
 
 if __name__ == '__main__':
   logging.basicConfig(

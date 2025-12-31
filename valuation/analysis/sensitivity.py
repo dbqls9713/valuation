@@ -5,21 +5,6 @@ This module provides tools to generate 2D sensitivity tables that show
 how intrinsic value varies across different discount rates and initial
 growth rates.
 
-Usage:
-  from valuation.analysis.sensitivity import SensitivityTableBuilder
-  from valuation.run import load_gold_panel, construct_fundamentals
-  from valuation.scenarios.config import ScenarioConfig
-
-  panel = load_gold_panel(Path('data/gold/out/valuation_panel.parquet'))
-  fundamentals = construct_fundamentals(panel, 'GOOGL', '2024-12-31')
-
-  builder = SensitivityTableBuilder(fundamentals, ScenarioConfig.default())
-  table = builder.build(
-      discount_rates=[0.08, 0.10, 0.12],
-      initial_growth_rates=[0.06, 0.08, 0.10],
-  )
-  print(table)
-
 CLI Usage:
   python -m valuation.analysis.sensitivity \\
       --ticker GOOGL \\
@@ -34,10 +19,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from valuation.data_loader import ValuationDataLoader
 from valuation.domain.types import FundamentalsSlice
 from valuation.engine.dcf import compute_intrinsic_value
-from valuation.run import adjust_for_splits
-from valuation.run import load_gold_panel
 from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
 
@@ -263,9 +247,9 @@ Examples:
       datefmt='%Y-%m-%d %H:%M:%S',
   )
 
-  logger.info('Loading Gold panel: %s', args.gold_path)
-  panel = load_gold_panel(args.gold_path)
-  panel = adjust_for_splits(panel)
+  logger.info('Loading data from: %s', args.gold_path)
+  loader = ValuationDataLoader(gold_path=args.gold_path)
+  panel = loader.load_panel()
 
   as_of_date = pd.Timestamp(args.as_of_date)
   logger.info('Constructing fundamentals: %s as of %s', args.ticker, as_of_date)

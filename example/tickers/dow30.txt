@@ -2,45 +2,75 @@
 # As of 2024-2025
 
 # Technology
+# Apple Inc.
 AAPL
+# Microsoft Corporation
 MSFT
+# Salesforce Inc.
 CRM
+# Cisco Systems Inc.
 CSCO
+# International Business Machines Corporation
 IBM
+# Intel Corporation
 INTC
 
 # Financial Services
+# Goldman Sachs Group Inc.
 GS
+# JPMorgan Chase & Co.
 JPM
+# Visa Inc.
 V
+# American Express Company
 AXP
+# The Travelers Companies Inc.
 TRV
 
 # Healthcare
+# Johnson & Johnson
 JNJ
+# UnitedHealth Group Incorporated
 UNH
+# Merck & Co. Inc.
 MRK
+# Amgen Inc.
 AMGN
 
 # Consumer Discretionary
+# Amazon.com Inc.
 AMZN
+# The Home Depot Inc.
 HD
+# McDonald's Corporation
 MCD
+# NIKE Inc.
 NKE
+# The Walt Disney Company
 DIS
 
 # Consumer Staples
+# Walmart Inc.
 WMT
+# The Procter & Gamble Company
 PG
+# The Coca-Cola Company
 KO
+# Chevron Corporation
 CVX
 
 # Industrials
+# The Boeing Company
 BA
+# Caterpillar Inc.
 CAT
+# Honeywell International Inc.
 HON
+# 3M Company
 MMM
 
 # Other
+# Dow Inc.
 DOW
+# Verizon Communications Inc.
 VZ

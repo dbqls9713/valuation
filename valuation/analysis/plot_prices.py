@@ -33,11 +33,10 @@ from typing import Any, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from valuation.data_loader import ValuationDataLoader
 from valuation.domain.types import FundamentalsSlice
 from valuation.engine.dcf import compute_intrinsic_value
-from valuation.run import adjust_for_splits
 from valuation.run import get_price_after_filing
-from valuation.run import load_gold_panel
 from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
 
@@ -120,7 +119,7 @@ def calculate_iv_for_date(
     ticker: str,
     as_of_date: pd.Timestamp,
     scenario: ScenarioConfig,
-    silver_dir: Path = Path('data/silver/out'),
+    loader: ValuationDataLoader,
 ) -> Optional[dict[str, Any]]:
   """
   Calculate IV for a single date using a specific scenario.
@@ -130,7 +129,7 @@ def calculate_iv_for_date(
       ticker: Company ticker
       as_of_date: As-of date for PIT filtering
       scenario: ScenarioConfig with policy settings
-      silver_dir: Path to Silver layer
+      loader: Data loader for accessing price data
 
   Returns:
       Dict with iv, growth, diagnostics or None if calculation fails
@@ -187,7 +186,7 @@ def calculate_iv_for_date(
   if not pd.isna(iv) and iv > 0:
     try:
       market_slice = get_price_after_filing(ticker, fundamentals.latest_filed,
-                                            silver_dir)
+                                            loader)
       market_price = market_slice.price
     except (FileNotFoundError, ValueError):
       market_price = None
@@ -213,7 +212,7 @@ def plot_scenario_comparison(
     start_date: pd.Timestamp,
     end_date: pd.Timestamp,
     output_dir: Path,
-    silver_dir: Path = Path('data/silver/out'),
+    loader: ValuationDataLoader,
 ) -> None:
   """Plot IV comparison for different scenarios vs market price."""
   ticker_panel = panel[panel['ticker'] == ticker].copy()
@@ -249,7 +248,7 @@ def plot_scenario_comparison(
 
     for scenario in scenarios:
       result = calculate_iv_for_date(panel, ticker, as_of_date, scenario,
-                                     silver_dir)
+                                     loader)
       if result:
         scenario_results[scenario.name] = result['iv']
         if not market_price and result['market_price']:
@@ -451,9 +450,12 @@ Examples:
 
   args.output_dir.mkdir(parents=True, exist_ok=True)
 
-  logger.info('Loading Gold panel: %s', args.gold_path)
-  panel = load_gold_panel(args.gold_path)
-  panel = adjust_for_splits(panel)
+  logger.info('Loading data from: %s', args.gold_path)
+  loader = ValuationDataLoader(
+      gold_path=args.gold_path,
+      silver_dir=args.silver_dir,
+  )
+  panel = loader.load_panel()
 
   start = pd.Timestamp(args.start_date)
   end = pd.Timestamp(args.end_date)
@@ -471,7 +473,7 @@ Examples:
         start_date=start,
         end_date=end,
         output_dir=args.output_dir,
-        silver_dir=args.silver_dir,
+        loader=loader,
     )
 
   logger.info('All charts saved to: %s', args.output_dir)
