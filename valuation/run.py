@@ -22,7 +22,7 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import pandas as pd
 
@@ -173,7 +173,7 @@ def run_valuation(
   data = FundamentalsSlice.from_panel(panel, ticker, as_of)
 
   policies = create_policies(config)
-  all_diag = {
+  all_diag: Dict[str, str] = {
       'scenario': config.name,
       'ticker': ticker,
       'as_of_date': str(as_of.date()),
@@ -209,6 +209,14 @@ def run_valuation(
 
   oe0 = data.latest_cfo_ttm - capex_result.value
   sh0 = data.latest_shares
+
+  # Add fundamental data to diagnostics
+  all_diag['fundamentals_cfo_ttm'] = str(data.latest_cfo_ttm)
+  all_diag['fundamentals_capex_ttm'] = str(data.latest_capex_ttm)
+  all_diag['fundamentals_shares'] = str(data.latest_shares)
+  all_diag['fundamentals_oe0'] = str(oe0)
+  all_diag['fundamentals_as_of_end'] = str(data.as_of_end.date())
+  all_diag['fundamentals_filed'] = str(data.latest_filed.date())
 
   inputs = PreparedInputs(
       oe0=oe0,

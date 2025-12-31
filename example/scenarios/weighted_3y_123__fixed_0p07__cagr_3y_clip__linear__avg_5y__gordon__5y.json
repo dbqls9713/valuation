@@ -1,0 +1,11 @@
+{
+  "name": "weighted_3y_123__fixed_0p07__cagr_3y_clip__linear__avg_5y__gordon__5y",
+  "capex": "weighted_3y_123",
+  "growth": "cagr_3y_clip",
+  "fade": "linear",
+  "shares": "avg_5y",
+  "terminal": "gordon",
+  "discount": "fixed_0p07",
+  "n_years": 5,
+  "policy_params": {}
+}

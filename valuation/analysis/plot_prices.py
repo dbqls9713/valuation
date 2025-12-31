@@ -1,24 +1,34 @@
 '''
-Compare intrinsic values calculated with different CAPEX methods.
+Compare intrinsic values using different scenario configs.
 
-Creates charts showing IV from different CAPEX approaches vs market price.
-Uses the valuation policy system for consistent calculations.
+Creates charts showing IV from different scenarios vs market price.
+Uses JSON config files for flexible scenario comparison.
 
 Usage:
-  python -m valuation.analysis.compare_capex \\
-      --tickers AAPL GOOGL META MSFT \\
-      --start-date 2020-01-01 \\
-      --end-date 2025-12-31
+  # Using specific config files
+  python -m valuation.analysis.plot_prices \\
+      --ticker AAPL \\
+      --configs scenarios/capex_experiments/*.json \\
+      --start-date 2020-01-01
 
-  python -m valuation.analysis.compare_capex \\
-      --tickers-file data/bronze/tickers_dow30.txt \\
-      --output-dir charts/capex_comparison
+  # Using config directory
+  python -m valuation.analysis.plot_prices \\
+      --ticker GOOGL \\
+      --config-dir scenarios/discount_experiments \\
+      --output-dir charts/discount_comparison
+
+  # Multiple tickers with configs
+  python -m valuation.analysis.plot_prices \\
+      --tickers AAPL GOOGL META MSFT \\
+      --config-dir scenarios/capex_experiments
 '''
 
 import argparse
+import hashlib
+import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -30,6 +40,77 @@ from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
 
 logger = logging.getLogger(__name__)
+
+
+def find_common_and_different_policies(
+    scenarios: List[ScenarioConfig]
+) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
+  '''
+  Find common policies across scenarios and what differs.
+
+  Returns:
+    (common_policies, different_policies_per_scenario)
+  '''
+  if not scenarios:
+    return {}, []
+
+  policy_fields = ['capex', 'growth', 'fade', 'shares', 'terminal', 'discount']
+  common: Dict[str, str] = {}
+  different_per_scenario: List[Dict[str, str]] = [{} for _ in scenarios]
+
+  for field in policy_fields:
+    values = [getattr(s, field) for s in scenarios]
+    if len(set(values)) == 1:
+      common[field] = values[0]
+    else:
+      for idx, value in enumerate(values):
+        different_per_scenario[idx][field] = value
+
+  n_years_values = [s.n_years for s in scenarios]
+  if len(set(n_years_values)) == 1:
+    common['n_years'] = f'{n_years_values[0]}y'
+  else:
+    for idx, value in enumerate(n_years_values):
+      different_per_scenario[idx]['n_years'] = f'{value}y'
+
+  return common, different_per_scenario
+
+
+def create_short_label(different_policies: Dict[str, str],
+                       scenario_name: str) -> str:
+  '''Create short label showing only different policies.'''
+  if not different_policies:
+    return scenario_name
+
+  parts = []
+  for key in [
+      'capex', 'discount', 'growth', 'fade', 'shares', 'terminal', 'n_years'
+  ]:
+    if key in different_policies:
+      parts.append(different_policies[key])
+
+  return ' | '.join(parts) if parts else scenario_name
+
+
+def load_configs_from_files(config_paths: List[Path]) -> List[ScenarioConfig]:
+  '''Load scenario configs from JSON files.'''
+  configs = []
+  for path in config_paths:
+    try:
+      with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+      config = ScenarioConfig.from_dict(data)
+      configs.append(config)
+      logger.info('Loaded config: %s from %s', config.name, path.name)
+    except Exception as e:  # pylint: disable=broad-except
+      logger.error('Failed to load %s: %s', path, e)
+  return configs
+
+
+def load_configs_from_dir(config_dir: Path) -> List[ScenarioConfig]:
+  '''Load all JSON configs from a directory.'''
+  json_files = sorted(config_dir.glob('*.json'))
+  return load_configs_from_files(json_files)
 
 
 def calculate_iv_for_date(
@@ -123,15 +204,16 @@ def calculate_iv_for_date(
   return None
 
 
-def plot_capex_comparison(
+def plot_scenario_comparison(
     ticker: str,
     panel: pd.DataFrame,
+    scenarios: List[ScenarioConfig],
     start_date: pd.Timestamp,
     end_date: pd.Timestamp,
     output_dir: Path,
     silver_dir: Path = Path('data/silver/out'),
 ) -> None:
-  '''Plot IV comparison for different CAPEX methods vs market price.'''
+  '''Plot IV comparison for different scenarios vs market price.'''
   ticker_panel = panel[panel['ticker'] == ticker].copy()
 
   if ticker_panel.empty:
@@ -146,42 +228,36 @@ def plot_capex_comparison(
     logger.warning('Insufficient data for %s', ticker)
     return
 
-  scenarios = {
-      'raw': ScenarioConfig.raw_capex(),
-      'weighted': ScenarioConfig.default(),
-      'clipped': ScenarioConfig.clipped_capex(),
-  }
+  if not scenarios:
+    logger.error('No scenarios provided')
+    return
 
   quarter_ends = sorted(ticker_panel['end'].unique())
-  results: Dict[str, list] = {
-      'dates': [],
-      'iv_raw': [],
-      'iv_weighted': [],
-      'iv_clipped': [],
-      'market_price': [],
-  }
 
-  logger.info('Calculating IVs for %d quarter-ends...', len(quarter_ends))
+  results: Dict[str, list] = {'dates': [], 'market_price': []}
+  for scenario in scenarios:
+    results[scenario.name] = []
+
+  logger.info('Calculating IVs for %d scenarios across %d quarters...',
+              len(scenarios), len(quarter_ends))
 
   for as_of_date in quarter_ends:
-    result_raw = calculate_iv_for_date(panel, ticker, as_of_date,
-                                       scenarios['raw'], silver_dir)
-    result_weighted = calculate_iv_for_date(panel, ticker, as_of_date,
-                                            scenarios['weighted'], silver_dir)
-    result_clipped = calculate_iv_for_date(panel, ticker, as_of_date,
-                                           scenarios['clipped'], silver_dir)
+    scenario_results = {}
+    market_price = None
 
-    if result_raw and result_weighted and result_clipped:
-      market_price = (result_weighted['market_price'] or
-                      result_raw['market_price'] or
-                      result_clipped['market_price'])
+    for scenario in scenarios:
+      result = calculate_iv_for_date(panel, ticker, as_of_date, scenario,
+                                     silver_dir)
+      if result:
+        scenario_results[scenario.name] = result['iv']
+        if not market_price and result['market_price']:
+          market_price = result['market_price']
 
-      if market_price:
-        results['dates'].append(as_of_date)
-        results['iv_raw'].append(result_raw['iv'])
-        results['iv_weighted'].append(result_weighted['iv'])
-        results['iv_clipped'].append(result_clipped['iv'])
-        results['market_price'].append(market_price)
+    if len(scenario_results) == len(scenarios) and market_price:
+      results['dates'].append(as_of_date)
+      results['market_price'].append(market_price)
+      for scenario in scenarios:
+        results[scenario.name].append(scenario_results[scenario.name])
 
   if len(results['dates']) == 0:
     logger.warning('No valid results for %s', ticker)
@@ -189,29 +265,29 @@ def plot_capex_comparison(
 
   logger.info('Generated %d data points', len(results['dates']))
 
+  common_policies, different_policies = find_common_and_different_policies(
+      scenarios)
+
   _, ax = plt.subplots(figsize=(14, 8))
 
-  ax.plot(results['dates'],
-          results['iv_raw'],
-          'o-',
-          label='(a) IV - Raw TTM CAPEX',
-          linewidth=2,
-          markersize=6,
-          alpha=0.8)
-  ax.plot(results['dates'],
-          results['iv_weighted'],
-          's-',
-          label='(b) IV - 3Y Weighted (1:2:3)',
-          linewidth=2,
-          markersize=6,
-          alpha=0.8)
-  ax.plot(results['dates'],
-          results['iv_clipped'],
-          '^-',
-          label='(c) IV - Intensity Clipping',
-          linewidth=2,
-          markersize=6,
-          alpha=0.8)
+  markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'X', 'P', 'h']
+  colors = plt.cm.tab10.colors
+
+  for idx, scenario in enumerate(scenarios):
+    marker = markers[idx % len(markers)]
+    color = colors[idx % len(colors)]
+
+    short_label = create_short_label(different_policies[idx], scenario.name)
+
+    ax.plot(results['dates'],
+            results[scenario.name],
+            marker=marker,
+            linestyle='-',
+            label=short_label,
+            linewidth=2,
+            markersize=6,
+            alpha=0.8,
+            color=color)
 
   ax.plot(results['dates'],
           results['market_price'],
@@ -224,39 +300,41 @@ def plot_capex_comparison(
 
   ax.set_xlabel('Quarter End Date', fontsize=12, fontweight='bold')
   ax.set_ylabel('Price per Share ($)', fontsize=12, fontweight='bold')
-  ax.set_title(f'{ticker} - Intrinsic Value by CAPEX Method vs Market Price',
-               fontsize=14,
-               fontweight='bold',
-               pad=20)
-  ax.legend(loc='best', fontsize=11, framealpha=0.9)
+
+  title = f'{ticker} - Intrinsic Value Comparison vs Market Price'
+  ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+
+  if common_policies:
+    common_parts = []
+    for key in ['capex', 'discount', 'growth', 'n_years']:
+      if key in common_policies:
+        common_parts.append(f'{key}={common_policies[key]}')
+    if common_parts:
+      subtitle = 'Common: ' + ', '.join(common_parts)
+      ax.text(0.5,
+              0.98,
+              subtitle,
+              transform=ax.transAxes,
+              ha='center',
+              va='top',
+              fontsize=9,
+              style='italic',
+              color='gray')
+
+  ax.legend(loc='upper left',
+            fontsize=9,
+            framealpha=0.95,
+            bbox_to_anchor=(0, 0.95))
   ax.grid(True, alpha=0.3, linestyle='--')
-
-  avg_iv_raw = sum(results['iv_raw']) / len(results['iv_raw'])
-  avg_iv_weighted = sum(results['iv_weighted']) / len(results['iv_weighted'])
-  avg_iv_clipped = sum(results['iv_clipped']) / len(results['iv_clipped'])
-  avg_market = sum(results['market_price']) / len(results['market_price'])
-
-  first_year = results['dates'][0].year
-  last_year = results['dates'][-1].year
-
-  stats_text = (f'Average ({first_year}-{last_year}):\n'
-                f'  Raw IV:      ${avg_iv_raw:.2f}\n'
-                f'  Weighted IV: ${avg_iv_weighted:.2f}\n'
-                f'  Clipped IV:  ${avg_iv_clipped:.2f}\n'
-                f'  Market:      ${avg_market:.2f}\n'
-                f'  Price/IV (Weighted): {avg_market/avg_iv_weighted:.1%}')
-
-  ax.text(0.02,
-          0.98,
-          stats_text,
-          transform=ax.transAxes,
-          verticalalignment='top',
-          fontsize=10,
-          bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
 
   plt.tight_layout()
 
-  output_path = output_dir / f'{ticker}_capex_comparison.png'
+  scenario_names = '__'.join([s.name for s in scenarios])
+  scenario_hash = hashlib.md5(scenario_names.encode()).hexdigest()[:8]
+  n_scenarios = len(scenarios)
+
+  filename = f'{ticker}__comparison__{n_scenarios}scenarios_{scenario_hash}.png'
+  output_path = output_dir / filename
   plt.savefig(output_path, dpi=150, bbox_inches='tight')
   logger.info('Saved: %s', output_path)
 
@@ -264,33 +342,46 @@ def plot_capex_comparison(
 
 
 def main() -> None:
-  '''CLI entrypoint for CAPEX comparison analysis.'''
+  '''CLI entrypoint for scenario comparison analysis.'''
   parser = argparse.ArgumentParser(
-      description='Compare IVs from different CAPEX methods',
+      description='Compare IVs from different scenario configs',
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog='''
 Examples:
-  # Basic usage
-  python -m valuation.analysis.compare_capex \\
-      --tickers AAPL GOOGL META MSFT
+  # Using config files
+  python -m valuation.analysis.plot_prices \\
+      --ticker AAPL \\
+      --configs scenarios/capex_experiments/*.json
 
-  # From ticker file
-  python -m valuation.analysis.compare_capex \\
-      --tickers-file data/bronze/tickers_dow30.txt \\
-      --start-date 2020-01-01
+  # Using config directory
+  python -m valuation.analysis.plot_prices \\
+      --ticker GOOGL \\
+      --config-dir scenarios/discount_experiments
 
-  # Custom output directory
-  python -m valuation.analysis.compare_capex \\
-      --tickers AAPL GOOGL \\
-      --output-dir charts/capex_analysis
+  # Multiple tickers
+  python -m valuation.analysis.plot_prices \\
+      --tickers AAPL GOOGL META \\
+      --config-dir scenarios/capex_experiments \\
+      --output-dir charts/comparison
       ''')
 
+  parser.add_argument('--ticker', type=str, help='Single ticker to analyze')
   parser.add_argument('--tickers',
                       nargs='+',
-                      help='Tickers to analyze (e.g., AAPL GOOGL META)')
+                      help='Multiple tickers (e.g., AAPL GOOGL META)')
   parser.add_argument('--tickers-file',
                       type=Path,
-                      help='Path to file with ticker list (one per line)')
+                      help='Path to file with ticker list')
+
+  config_group = parser.add_mutually_exclusive_group(required=True)
+  config_group.add_argument('--configs',
+                            nargs='+',
+                            type=Path,
+                            help='Config file paths')
+  config_group.add_argument('--config-dir',
+                            type=Path,
+                            help='Directory with config files')
+
   parser.add_argument('--start-date',
                       default='2020-01-01',
                       help='Start date (YYYY-MM-DD)')
@@ -322,7 +413,20 @@ Examples:
       datefmt='%Y-%m-%d %H:%M:%S',
   )
 
-  if args.tickers_file:
+  if args.configs:
+    configs = load_configs_from_files(args.configs)
+  else:
+    configs = load_configs_from_dir(args.config_dir)
+
+  if not configs:
+    logger.error('No valid configs loaded')
+    return
+
+  logger.info('Loaded %d scenarios', len(configs))
+
+  if args.ticker:
+    tickers = [args.ticker]
+  elif args.tickers_file:
     if not args.tickers_file.exists():
       raise FileNotFoundError(f'File not found: {args.tickers_file}')
 
@@ -340,8 +444,8 @@ Examples:
   elif args.tickers:
     tickers = args.tickers
   else:
-    tickers = ['AAPL', 'GOOGL', 'META', 'MSFT']
-    logger.warning('No tickers specified, using defaults: %s', tickers)
+    logger.error('Must specify --ticker, --tickers, or --tickers-file')
+    return
 
   args.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -354,12 +458,14 @@ Examples:
 
   logger.info('Analyzing %d companies: %s', len(tickers), ', '.join(tickers))
   logger.info('Period: %s to %s', args.start_date, args.end_date)
+  logger.info('Scenarios: %s', [c.name for c in configs])
 
   for ticker in tickers:
     logger.info('Processing %s...', ticker)
-    plot_capex_comparison(
+    plot_scenario_comparison(
         ticker=ticker,
         panel=panel,
+        scenarios=configs,
         start_date=start,
         end_date=end,
         output_dir=args.output_dir,

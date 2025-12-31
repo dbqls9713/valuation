@@ -93,8 +93,11 @@ TERMINAL_POLICIES: Dict[str, Callable[[], TerminalPolicy]] = {
 
 DISCOUNT_POLICIES: Dict[str, Callable[[], DiscountPolicy]] = {
     'fixed_0p06': lambda: FixedRate(rate=0.06),
+    'fixed_0p07': lambda: FixedRate(rate=0.07),
     'fixed_0p08': lambda: FixedRate(rate=0.08),
+    'fixed_0p09': lambda: FixedRate(rate=0.09),
     'fixed_0p10': lambda: FixedRate(rate=0.10),
+    'fixed_0p11': lambda: FixedRate(rate=0.11),
     'fixed_0p12': lambda: FixedRate(rate=0.12),
 }
 

@@ -340,8 +340,9 @@ def _build_argparser() -> argparse.ArgumentParser:
                  help='always re-download regardless of freshness')
   p.add_argument(
       '--sec-user-agent',
-      default='YubinYi valuation research yuvin.yi@yanolja.com',
-      help='SEC requires declared User-Agent (company/contact).',
+      required=True,
+      help='SEC requires declared User-Agent (company/contact).'
+      ' (e.g., "StevenJobs valuation research (stevenjobs@gmail.com)")',
   )
   # SEC max is 10 req/s; keep safer default: 0.2s => 5 req/s
   p.add_argument('--sec-min-interval',

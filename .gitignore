@@ -5,5 +5,7 @@ venv
 **/*.csv
 **/*.png
 **/*.txt
-!data/tickers_example.txt
+!example/**/*.txt
+!example/**/*.json
+!example/**/*.png
 .DS_Store

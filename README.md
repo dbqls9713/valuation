@@ -2,11 +2,23 @@
 
 Production-grade DCF valuation framework with ETL pipeline, policy-based architecture, and backtesting capabilities.
 
+> **Disclaimer**: This is a valuation tool for research and analysis purposes. Investment decisions are the sole responsibility of the investor. This tool does not constitute financial advice.
+
+## Requirements
+python >= 3.12
+
+```bash
+python3.12 -m venv venv
+source venv/bin/activate
+pip install -r requirements.in
+```
+
 ## Quick Start
 
 ```bash
 # 1. Data ingestion
-python -m data.bronze.update --tickers AAPL GOOGL MSFT
+python -m data.bronze.update --tickers-file example/tickers/bigtech.txt \
+  --sec-user-agent "${your_name} valuation research (${your_email})"
 
 # 2. Build pipeline
 python -m data.silver.build && python -m data.gold.build
@@ -16,10 +28,45 @@ python -m valuation.run --ticker AAPL --as-of 2024-09-30
 
 # 4. Batch valuation
 python -m valuation.analysis.batch_valuation \
-  --tickers-file data/bronze/tickers_dow30.txt \
+  --tickers-file example/tickers/bigtech.txt \
   --as-of-date 2024-09-30 \
-  --output results/dow30.csv -v
+  --output output/valuation/bigtech.csv -v
 ```
+
+### Scenario Experimentation + Visualization
+
+Compare multiple valuation scenarios systematically:
+
+```bash
+# 1. Generate scenario configs (Grid Search)
+python -m valuation.analysis.generate_grid_configs \
+  --discount fixed_0p07 fixed_0p09 \
+  --terminal gordon gordon_2pct \
+  --n-years 3 5 10 \
+  --output-dir scenarios/my_experiment
+
+# 2. Run backtest with all scenarios
+python -m valuation.analysis.backtest_from_configs \
+  --ticker AAPL \
+  --start-date 2020-01-01 \
+  --end-date 2025-12-31 \
+  --config-dir example/scenarios \
+  --output output/valuation/bigtech.csv
+
+# 3. Visualize comparison
+python -m valuation.analysis.plot_prices \
+  --tickers-file example/tickers/bigtech.txt \
+  --start-date 2020-01-01 \
+  --end-date 2025-12-31 \
+  --config-dir example/scenarios \
+  --output-dir output/analysis/price_charts
+```
+
+**Example Output:**
+
+![MSFT Scenario Comparison](example/charts/MSFT__comparison__12scenarios_e64025ed.png)
+
+*Figure: MSFT intrinsic value across 12 scenarios (2×2×3 grid: discount × terminal × n_years). Common policies shown in subtitle, differences in legend.*
 
 ## Architecture
 
@@ -67,9 +114,17 @@ valuation/
 │   ├── scenarios/       # Scenario configs
 │   └── analysis/        # Analysis tools
 │       ├── README.md    # Analysis docs
-│       ├── batch_valuation.py    # Multi-company
-│       ├── sensitivity.py        # Sensitivity tables
-│       └── compare_capex.py      # CAPEX comparison
+│       ├── batch_valuation.py       # Multi-company
+│       ├── backtest_from_configs.py # Config-based backtest
+│       ├── generate_grid_configs.py # Grid search generator
+│       ├── plot_prices.py           # Scenario visualization
+│       └── sensitivity.py           # Sensitivity tables
+│
+├── scenarios/           # JSON scenario configs
+│   ├── README.md       # Scenario documentation
+│   ├── base/           # Core scenarios (default, conservative, aggressive)
+│   ├── capex_experiments/   # CAPEX method variations
+│   └── discount_experiments/  # Discount rate sensitivity
 │
 └── results/             # Output files (CSV, charts)
 ```
@@ -78,8 +133,11 @@ valuation/
 
 - **Policy-based architecture**: Easy experimentation with different methodologies
 - **PIT (Point-in-Time)**: Only uses data available at backtest date
+- **JSON config scenarios**: Version-controlled, reproducible experiments
+- **Grid search**: Automatic generation of scenario combinations
 - **Multiple CAPEX methods**: Raw, 3yr weighted, intensity clipping
 - **Batch processing**: Valuation for entire stock lists
+- **Visualization**: Compare scenarios with intelligent legend (differences only)
 - **Sensitivity analysis**: 2D tables (discount × growth rates)
 - **Full diagnostics**: Every policy returns value + detailed diagnostics
 
@@ -112,6 +170,7 @@ config = ScenarioConfig(
 - **[data/README.md](data/README.md)**: ETL pipeline details (Bronze/Silver/Gold)
 - **[valuation/README.md](valuation/README.md)**: Valuation framework and policies
 - **[valuation/analysis/README.md](valuation/analysis/README.md)**: Analysis tools usage
+- **[scenarios/README.md](scenarios/README.md)**: Scenario configuration and grid search
 
 ## Development
 

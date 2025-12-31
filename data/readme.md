@@ -16,7 +16,8 @@ python -m data.bronze.update --tickers AAPL GOOGL
 ```
 or
 ```bash
-python -m data.bronze.update --tickers-file data/tickers_example.txt
+python -m data.bronze.update --tickers-file example/tickers/bigtech.txt \
+  --sec-user-agent "StevenJobs valuation research (stevenjobs@gmail.com)"
 ```
 
 **Output**: `data/bronze/out/sec/`, `data/bronze/out/stooq/`

@@ -1,0 +1,46 @@
+# Dow Jones Industrial Average (DJIA) 30 Companies
+# As of 2024-2025
+
+# Technology
+AAPL
+MSFT
+CRM
+CSCO
+IBM
+INTC
+
+# Financial Services
+GS
+JPM
+V
+AXP
+TRV
+
+# Healthcare
+JNJ
+UNH
+MRK
+AMGN
+
+# Consumer Discretionary
+AMZN
+HD
+MCD
+NKE
+DIS
+
+# Consumer Staples
+WMT
+PG
+KO
+CVX
+
+# Industrials
+BA
+CAT
+HON
+MMM
+
+# Other
+DOW
+VZ

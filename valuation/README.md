@@ -20,6 +20,62 @@ valuation/
 └── run.py          # Single valuation entrypoint
 ```
 
+## DCF Model
+
+The framework uses a **two-stage DCF model** to calculate intrinsic value:
+
+### Stage 1: Explicit Forecast Period (N years)
+
+**Owner Earnings** grow and get discounted to present value:
+
+```
+For each year t = 1 to N:
+  OE(t) = OE(t-1) × (1 + g(t))           # Earnings growth
+  Shares(t) = Shares(t-1) × (1 - b)      # Share buybacks
+  OEPS(t) = OE(t) / Shares(t)            # Per-share earnings
+
+PV_explicit = Σ [ OEPS(t) / (1+r)^t ]    # Discount to present
+```
+
+Where:
+- `OE(t)` = Owner Earnings (CFO - CAPEX) in year t
+- `g(t)` = Growth rate (typically fades from g0 to g_terminal)
+- `b` = Buyback rate (share reduction rate)
+- `r` = Discount rate (required return)
+
+### Stage 2: Terminal Value
+
+**Perpetual growth** beyond the explicit period using Gordon Growth:
+
+```
+TV = OEPS(N) × (1 + g_terminal) / (r - g_terminal)
+PV_terminal = TV / (1+r)^N
+```
+
+Constraint: `r > g_terminal` (required for convergence)
+
+### Total Intrinsic Value
+
+```
+IV per share = PV_explicit + PV_terminal
+```
+
+### Key Inputs
+
+All inputs prepared by **policies**:
+
+| Input | Policy | Description |
+|-------|--------|-------------|
+| OE0 | CAPEX | CFO(TTM) - CAPEX(TTM) |
+| Shares | Shares | Current diluted shares |
+| b | Shares | Buyback rate (5yr CAGR) |
+| g0 | Growth | Initial growth (3yr CAGR, clipped) |
+| g(t) | Fade | Growth path (linear fade) |
+| g_terminal | Terminal | Perpetual growth (3%) |
+| r | Discount | Required return (10%) |
+
+See `valuation/engine/dcf.py` for detailed math implementation.
+
 ## Quick Start
 
 ### Single Valuation
