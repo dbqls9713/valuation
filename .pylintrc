@@ -51,9 +51,8 @@ confidence=
 # no Warning level messages displayed, use"--disable=all --enable=classes
 # --disable=W"
 
-# Per-file ignores - disable C0114 (missing-module-docstring) for test files
-per-file-ignores =
-    .*test\.py:C0114
+per-file-ignores=
+    **/*test.py:missing-module-docstring
 
 disable=R,
         abstract-method,
