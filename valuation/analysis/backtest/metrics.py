@@ -1,16 +1,16 @@
-'''
+"""
 Summary metrics for backtest results.
 
 Provides functions to compute aggregate statistics from backtest output.
-'''
+"""
 
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 
 
 def compute_summary_stats(results: pd.DataFrame) -> pd.DataFrame:
-  '''
+  """
   Compute summary statistics from backtest results.
 
   Args:
@@ -18,7 +18,7 @@ def compute_summary_stats(results: pd.DataFrame) -> pd.DataFrame:
 
   Returns:
     DataFrame with summary stats per scenario
-  '''
+  """
   mask = results['iv_per_share'].notna() & (results['iv_per_share'] > 0)
   valid = results[mask]
 
@@ -65,9 +65,8 @@ def compute_summary_stats(results: pd.DataFrame) -> pd.DataFrame:
 
   return pd.DataFrame(summary_rows)
 
-
 def compute_scenario_comparison(results: pd.DataFrame) -> pd.DataFrame:
-  '''
+  """
   Compare IVs across scenarios for the same dates.
 
   Args:
@@ -75,7 +74,7 @@ def compute_scenario_comparison(results: pd.DataFrame) -> pd.DataFrame:
 
   Returns:
     Wide-form DataFrame with scenarios as columns, dates as rows
-  '''
+  """
   mask = results['iv_per_share'].notna() & (results['iv_per_share'] > 0)
   valid = results[mask]
 
@@ -91,13 +90,12 @@ def compute_scenario_comparison(results: pd.DataFrame) -> pd.DataFrame:
 
   return pivot
 
-
 def compute_hit_rate(
     results: pd.DataFrame,
     threshold: float = 0.8,
     scenario: str = 'default',
-) -> Dict[str, Any]:
-  '''
+) -> dict[str, Any]:
+  """
   Compute "hit rate" - how often market price was below IV by threshold.
 
   Args:
@@ -107,7 +105,7 @@ def compute_hit_rate(
 
   Returns:
     Dictionary with hit rate statistics
-  '''
+  """
   valid = results[(results['scenario'] == scenario) &
                   (results['price_to_iv'].notna())]
 

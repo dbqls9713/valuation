@@ -1,4 +1,4 @@
-'''
+"""
 DEPRECATED: Use data.gold.panels.ValuationPanelBuilder instead.
 
 This module is kept for backwards compatibility.
@@ -9,11 +9,11 @@ New usage:
   builder = ValuationPanelBuilder(silver_dir, gold_dir, min_date='2010-01-01')
   panel = builder.build()
   builder.save()
-'''
+"""
 
-import warnings
 from pathlib import Path
 from typing import Optional
+import warnings
 
 import pandas as pd
 
@@ -26,11 +26,11 @@ def build_valuation_panel(
     gold_dir: Path,
     min_date: Optional[str] = None,
 ) -> pd.DataFrame:
-  '''
+  """
   DEPRECATED: Use ValuationPanelBuilder instead.
 
   Build model-ready valuation panel from Silver tables.
-  '''
+  """
   warnings.warn(
       'build_valuation_panel is deprecated. '
       'Use ValuationPanelBuilder instead.',

@@ -1,16 +1,15 @@
-'''
+"""
 Build Gold layer panels.
 
 Usage:
   python -m data.gold.build                     # Build all panels
   python -m data.gold.build --panel valuation   # Build specific panel
   python -m data.gold.build --validate          # Validate after build
-'''
+"""
 
 import argparse
 import logging
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 
@@ -20,15 +19,14 @@ logger = logging.getLogger(__name__)
 
 AVAILABLE_PANELS = ['valuation']
 
-
 def build_panels(
-    panels: List[str],
+    panels: list[str],
     silver_dir: Path,
     gold_dir: Path,
     min_date: str = '2010-01-01',
     validate: bool = True,
 ) -> None:
-  '''
+  """
   Build specified Gold layer panels.
 
   Args:
@@ -37,7 +35,7 @@ def build_panels(
     gold_dir: Path to Gold layer output
     min_date: Minimum date filter
     validate: Whether to validate after build
-  '''
+  """
   pd.set_option('display.max_columns', None)
   pd.set_option('display.width', None)
 
@@ -69,9 +67,8 @@ def build_panels(
     logger.info('%s', builder.summary())
     logger.debug('Sample:\n%s', panel.head(5).to_string(index=False))
 
-
 def main() -> None:
-  '''CLI entrypoint.'''
+  """CLI entrypoint."""
   parser = argparse.ArgumentParser(description='Build Gold layer panels')
   parser.add_argument(
       '--panel',
@@ -113,7 +110,6 @@ def main() -> None:
       min_date=args.min_date,
       validate=not args.no_validate,
   )
-
 
 if __name__ == '__main__':
   logging.basicConfig(

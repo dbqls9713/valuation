@@ -18,7 +18,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
 def main():
   parser = argparse.ArgumentParser(description='Build Silver layer')
   parser.add_argument('--sources',
@@ -68,7 +67,6 @@ def main():
 
   if success_count < len(results):
     raise SystemExit(1)
-
 
 if __name__ == '__main__':
   main()

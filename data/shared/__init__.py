@@ -1,4 +1,4 @@
-'''Shared utilities across data layers.'''
+"""Shared utilities across data layers."""
 
 from data.shared.io import ParquetWriter
 

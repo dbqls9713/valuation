@@ -2,15 +2,16 @@
 SEC data processing pipeline.
 """
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 
-from data.silver.core.pipeline import Pipeline, PipelineContext
-from data.silver.sources.sec.extractors import SECCompanyFactsExtractor
-from data.silver.sources.sec.transforms import SECFactsTransformer, SECMetricsBuilder
-from data.silver.shared.validators import BasicValidator
 from data.shared.io import ParquetWriter
+from data.silver.core.pipeline import Pipeline
+from data.silver.core.pipeline import PipelineContext
+from data.silver.shared.validators import BasicValidator
+from data.silver.sources.sec.extractors import SECCompanyFactsExtractor
+from data.silver.sources.sec.transforms import SECFactsTransformer
+from data.silver.sources.sec.transforms import SECMetricsBuilder
 
 
 class SECPipeline(Pipeline):
@@ -136,7 +137,7 @@ class SECPipeline(Pipeline):
                         metadata=metadata,
                         target_date=target_date)
 
-  def _get_companyfact_files(self) -> List[Path]:
+  def _get_companyfact_files(self) -> list[Path]:
     """Get companyfacts files."""
     cf_dir = self.sec_dir / 'companyfacts'
     if not cf_dir.exists():

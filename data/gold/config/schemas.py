@@ -1,4 +1,4 @@
-'''
+"""
 Schema definitions for Gold layer panels.
 
 Each panel has a defined schema with:
@@ -12,46 +12,45 @@ Usage:
 
   # Validate DataFrame against schema
   errors = VALUATION_PANEL_SCHEMA.validate(df)
-'''
+"""
 
-from dataclasses import dataclass, field
-from typing import List
+from dataclasses import dataclass
+from dataclasses import field
 
 import pandas as pd
 
 
 @dataclass
 class ColumnSpec:
-  '''Specification for a single column.'''
+  """Specification for a single column."""
   name: str
   dtype: str
   nullable: bool = True
   description: str = ''
 
-
 @dataclass
 class PanelSchema:
-  '''
+  """
   Schema definition for a Gold panel.
 
   Provides validation and documentation for panel DataFrames.
-  '''
+  """
   name: str
   description: str
-  columns: List[ColumnSpec]
-  primary_key: List[str] = field(default_factory=list)
+  columns: list[ColumnSpec]
+  primary_key: list[str] = field(default_factory=list)
 
-  def column_names(self) -> List[str]:
-    '''Return list of column names.'''
+  def column_names(self) -> list[str]:
+    """Return list of column names."""
     return [c.name for c in self.columns]
 
-  def validate(self, df: pd.DataFrame) -> List[str]:
-    '''
+  def validate(self, df: pd.DataFrame) -> list[str]:
+    """
     Validate DataFrame against schema.
 
     Returns:
       List of error messages (empty if valid)
-    '''
+    """
     errors = []
 
     # Check required columns
@@ -86,11 +85,11 @@ class PanelSchema:
     return errors
 
   def get_dtype_dict(self) -> dict:
-    '''Return dtype mapping for pandas.'''
+    """Return dtype mapping for pandas."""
     return {c.name: c.dtype for c in self.columns}
 
   def summary(self) -> str:
-    '''Return human-readable schema summary.'''
+    """Return human-readable schema summary."""
     lines = [
         f'Panel: {self.name}',
         f'Description: {self.description}',
@@ -104,7 +103,6 @@ class PanelSchema:
       if col.description:
         lines.append(f'    {col.description}')
     return '\n'.join(lines)
-
 
 VALUATION_PANEL_SCHEMA = PanelSchema(
     name='valuation_panel',

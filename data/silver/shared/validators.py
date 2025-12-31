@@ -3,7 +3,8 @@ Shared validators.
 """
 import pandas as pd
 
-from data.silver.core.validator import Validator, ValidationResult
+from data.silver.core.validator import ValidationResult
+from data.silver.core.validator import Validator
 
 
 class BasicValidator(Validator):

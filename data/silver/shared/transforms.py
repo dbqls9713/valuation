@@ -1,7 +1,6 @@
 """
 Shared transformation utilities.
 """
-from typing import List
 
 import pandas as pd
 
@@ -12,7 +11,7 @@ class TTMCalculator:
   def calculate(self,
                 df: pd.DataFrame,
                 value_col: str,
-                group_cols: List[str],
+                group_cols: list[str],
                 sort_col: str = 'end') -> pd.DataFrame:
     """
     Calculate TTM by rolling 4-quarter sum.
@@ -34,7 +33,6 @@ class TTMCalculator:
                                              drop=True)
 
     return df
-
 
 class FiscalYearCalculator:
   """Calculate fiscal year from calendar dates."""

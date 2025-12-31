@@ -115,7 +115,6 @@ def convert_parquet_to_csv(
   print(f"  Compression ratio: {csv_size / parquet_size:.1f}x")
   print('✓ Done!')
 
-
 def main() -> None:
   parser = argparse.ArgumentParser(
       description='Convert Parquet files to CSV for validation',
@@ -166,7 +165,6 @@ def main() -> None:
       columns=args.cols,
       sort_by=args.sort,
   )
-
 
 if __name__ == '__main__':
   main()

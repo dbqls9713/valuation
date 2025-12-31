@@ -1,4 +1,4 @@
-'''
+"""
 Compare intrinsic values using different scenario configs.
 
 Creates charts showing IV from different scenarios vs market price.
@@ -21,21 +21,23 @@ Usage:
   python -m valuation.analysis.plot_prices \\
       --tickers AAPL GOOGL META MSFT \\
       --config-dir scenarios/capex_experiments
-'''
+"""
 
 import argparse
 import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
 from valuation.domain.types import FundamentalsSlice
 from valuation.engine.dcf import compute_intrinsic_value
-from valuation.run import load_gold_panel, adjust_for_splits, get_price_after_filing
+from valuation.run import adjust_for_splits
+from valuation.run import get_price_after_filing
+from valuation.run import load_gold_panel
 from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
 
@@ -43,20 +45,20 @@ logger = logging.getLogger(__name__)
 
 
 def find_common_and_different_policies(
-    scenarios: List[ScenarioConfig]
-) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
-  '''
+    scenarios: list[ScenarioConfig]
+) -> tuple[dict[str, str], list[dict[str, str]]]:
+  """
   Find common policies across scenarios and what differs.
 
   Returns:
     (common_policies, different_policies_per_scenario)
-  '''
+  """
   if not scenarios:
     return {}, []
 
   policy_fields = ['capex', 'growth', 'fade', 'shares', 'terminal', 'discount']
-  common: Dict[str, str] = {}
-  different_per_scenario: List[Dict[str, str]] = [{} for _ in scenarios]
+  common: dict[str, str] = {}
+  different_per_scenario: list[dict[str, str]] = [{} for _ in scenarios]
 
   for field in policy_fields:
     values = [getattr(s, field) for s in scenarios]
@@ -76,9 +78,9 @@ def find_common_and_different_policies(
   return common, different_per_scenario
 
 
-def create_short_label(different_policies: Dict[str, str],
+def create_short_label(different_policies: dict[str, str],
                        scenario_name: str) -> str:
-  '''Create short label showing only different policies.'''
+  """Create short label showing only different policies."""
   if not different_policies:
     return scenario_name
 
@@ -92,8 +94,8 @@ def create_short_label(different_policies: Dict[str, str],
   return ' | '.join(parts) if parts else scenario_name
 
 
-def load_configs_from_files(config_paths: List[Path]) -> List[ScenarioConfig]:
-  '''Load scenario configs from JSON files.'''
+def load_configs_from_files(config_paths: list[Path]) -> list[ScenarioConfig]:
+  """Load scenario configs from JSON files."""
   configs = []
   for path in config_paths:
     try:
@@ -107,8 +109,8 @@ def load_configs_from_files(config_paths: List[Path]) -> List[ScenarioConfig]:
   return configs
 
 
-def load_configs_from_dir(config_dir: Path) -> List[ScenarioConfig]:
-  '''Load all JSON configs from a directory.'''
+def load_configs_from_dir(config_dir: Path) -> list[ScenarioConfig]:
+  """Load all JSON configs from a directory."""
   json_files = sorted(config_dir.glob('*.json'))
   return load_configs_from_files(json_files)
 
@@ -119,8 +121,8 @@ def calculate_iv_for_date(
     as_of_date: pd.Timestamp,
     scenario: ScenarioConfig,
     silver_dir: Path = Path('data/silver/out'),
-) -> Optional[Dict]:
-  '''
+) -> Optional[dict[str, Any]]:
+  """
   Calculate IV for a single date using a specific scenario.
 
   Args:
@@ -132,7 +134,7 @@ def calculate_iv_for_date(
 
   Returns:
       Dict with iv, growth, diagnostics or None if calculation fails
-  '''
+  """
   try:
     fundamentals = FundamentalsSlice.from_panel(
         panel=panel,
@@ -207,13 +209,13 @@ def calculate_iv_for_date(
 def plot_scenario_comparison(
     ticker: str,
     panel: pd.DataFrame,
-    scenarios: List[ScenarioConfig],
+    scenarios: list[ScenarioConfig],
     start_date: pd.Timestamp,
     end_date: pd.Timestamp,
     output_dir: Path,
     silver_dir: Path = Path('data/silver/out'),
 ) -> None:
-  '''Plot IV comparison for different scenarios vs market price.'''
+  """Plot IV comparison for different scenarios vs market price."""
   ticker_panel = panel[panel['ticker'] == ticker].copy()
 
   if ticker_panel.empty:
@@ -234,7 +236,7 @@ def plot_scenario_comparison(
 
   quarter_ends = sorted(ticker_panel['end'].unique())
 
-  results: Dict[str, list] = {'dates': [], 'market_price': []}
+  results: dict[str, list] = {'dates': [], 'market_price': []}
   for scenario in scenarios:
     results[scenario.name] = []
 
@@ -342,11 +344,11 @@ def plot_scenario_comparison(
 
 
 def main() -> None:
-  '''CLI entrypoint for scenario comparison analysis.'''
+  """CLI entrypoint for scenario comparison analysis."""
   parser = argparse.ArgumentParser(
       description='Compare IVs from different scenario configs',
       formatter_class=argparse.RawDescriptionHelpFormatter,
-      epilog='''
+      epilog="""
 Examples:
   # Using config files
   python -m valuation.analysis.plot_prices \\
@@ -363,7 +365,7 @@ Examples:
       --tickers AAPL GOOGL META \\
       --config-dir scenarios/capex_experiments \\
       --output-dir charts/comparison
-      ''')
+      """)
 
   parser.add_argument('--ticker', type=str, help='Single ticker to analyze')
   parser.add_argument('--tickers',

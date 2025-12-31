@@ -1,4 +1,4 @@
-'''
+"""
 Sensitivity analysis for DCF valuation.
 
 This module provides tools to generate 2D sensitivity tables that show
@@ -26,17 +26,18 @@ CLI Usage:
       --as-of-date 2024-12-31 \\
       --discount-rates 0.08,0.10,0.12 \\
       --growth-rates 0.06,0.08,0.10,0.12
-'''
+"""
 
 import argparse
 import logging
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 
 from valuation.domain.types import FundamentalsSlice
 from valuation.engine.dcf import compute_intrinsic_value
+from valuation.run import adjust_for_splits
+from valuation.run import load_gold_panel
 from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
 
@@ -44,26 +45,26 @@ logger = logging.getLogger(__name__)
 
 
 class SensitivityTableBuilder:
-  '''
+  """
   Build 2D sensitivity tables for intrinsic value analysis.
 
   Varies discount rate and initial growth rate while keeping other
   parameters (CAPEX, shares, terminal growth) fixed based on the
   scenario configuration.
-  '''
+  """
 
   def __init__(
       self,
       fundamentals: FundamentalsSlice,
       base_config: ScenarioConfig,
   ):
-    '''
+    """
     Initialize sensitivity table builder.
 
     Args:
         fundamentals: Company fundamentals slice (PIT-safe)
         base_config: Base scenario configuration for policies
-    '''
+    """
     self.fundamentals = fundamentals
     self.base_config = base_config
     self.policies = create_policies(base_config)
@@ -86,10 +87,10 @@ class SensitivityTableBuilder:
 
   def build(
       self,
-      discount_rates: List[float],
-      initial_growth_rates: List[float],
+      discount_rates: list[float],
+      initial_growth_rates: list[float],
   ) -> pd.DataFrame:
-    '''
+    """
     Build 2D sensitivity table.
 
     Args:
@@ -100,7 +101,7 @@ class SensitivityTableBuilder:
     Returns:
         DataFrame with discount rates as index, growth rates as columns,
         and intrinsic values per share as cell values
-    '''
+    """
     if not discount_rates:
       raise ValueError('discount_rates cannot be empty')
     if not initial_growth_rates:
@@ -142,13 +143,13 @@ class SensitivityTableBuilder:
     return df
 
 
-def _parse_float_list(s: str) -> List[float]:
-  '''Parse comma-separated float list.'''
+def _parse_float_list(s: str) -> list[float]:
+  """Parse comma-separated float list."""
   return [float(x.strip()) for x in s.split(',')]
 
 
-def _frange(start: float, stop: float, step: float) -> List[float]:
-  '''
+def _frange(start: float, stop: float, step: float) -> list[float]:
+  """
   Inclusive float range with rounding.
 
   Args:
@@ -158,7 +159,7 @@ def _frange(start: float, stop: float, step: float) -> List[float]:
 
   Returns:
       List of floats from start to stop (inclusive)
-  '''
+  """
   if step <= 0:
     raise ValueError('step must be > 0')
   n = int(round((stop - start) / step))
@@ -168,11 +169,11 @@ def _frange(start: float, stop: float, step: float) -> List[float]:
 
 
 def main() -> None:
-  '''CLI entrypoint for sensitivity analysis.'''
+  """CLI entrypoint for sensitivity analysis."""
   parser = argparse.ArgumentParser(
       description='DCF Sensitivity Analysis',
       formatter_class=argparse.RawDescriptionHelpFormatter,
-      epilog='''
+      epilog="""
 Examples:
   # Basic usage with explicit rates
   python -m valuation.analysis.sensitivity \\
@@ -192,7 +193,7 @@ Examples:
       --scenario conservative \\
       --discount-rates 0.10,0.12,0.14 \\
       --growth-rates 0.04,0.06,0.08
-      ''')
+      """)
 
   parser.add_argument('--ticker',
                       type=str,
@@ -262,9 +263,6 @@ Examples:
       datefmt='%Y-%m-%d %H:%M:%S',
   )
 
-  from valuation.run import load_gold_panel, adjust_for_splits  # pylint: disable=C0415
-  from valuation.domain import types  # pylint: disable=C0415
-
   logger.info('Loading Gold panel: %s', args.gold_path)
   panel = load_gold_panel(args.gold_path)
   panel = adjust_for_splits(panel)
@@ -272,7 +270,7 @@ Examples:
   as_of_date = pd.Timestamp(args.as_of_date)
   logger.info('Constructing fundamentals: %s as of %s', args.ticker, as_of_date)
 
-  fundamentals = types.FundamentalsSlice.from_panel(
+  fundamentals = FundamentalsSlice.from_panel(
       panel=panel,
       ticker=args.ticker,
       as_of_date=as_of_date,

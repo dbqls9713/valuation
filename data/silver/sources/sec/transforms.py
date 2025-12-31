@@ -1,7 +1,6 @@
 """
 SEC-specific transformations.
 """
-from typing import List
 
 import pandas as pd
 
@@ -56,7 +55,7 @@ class SECFactsTransformer:
                   'filed'], keep='last').reset_index(drop=True)
 
     # Original logic: keep only latest filed version
-    out_parts: List[pd.DataFrame] = []
+    out_parts: list[pd.DataFrame] = []
 
     for _, g in df.groupby(['cik10', 'metric', 'fiscal_year'], dropna=True):
       # Since we filtered fy == fiscal_year, all records belong to this
@@ -84,7 +83,6 @@ class SECFactsTransformer:
 
     return pd.concat(non_empty, ignore_index=True).reset_index(drop=True)
 
-
 class SECMetricsBuilder:
   """Build quarterly metrics from facts."""
 
@@ -95,7 +93,7 @@ class SECMetricsBuilder:
     Output columns:
       cik10, metric, end, filed, fy, fp, fiscal_year, q_val, ttm_val, tag
     """
-    out_parts: List[pd.DataFrame] = []
+    out_parts: list[pd.DataFrame] = []
 
     for metric, spec in METRIC_SPECS.items():
       df = facts_long[facts_long['metric'] == metric].copy()
@@ -180,7 +178,7 @@ class SECMetricsBuilder:
 
   @staticmethod
   def _normalize_shares_to_actual_count(series: pd.Series) -> pd.Series:
-    '''
+    """
     Normalize shares to actual count (not millions).
 
     Heuristic: If value < 1,000,000, assume it's in millions
@@ -189,7 +187,7 @@ class SECMetricsBuilder:
     Examples:
       717.2 → 717,200,000 (was in millions)
       7,466,000,000 → 7,466,000,000 (already actual count)
-    '''
+    """
     threshold = 1_000_000
 
     def normalize_value(val):

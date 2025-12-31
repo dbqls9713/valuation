@@ -21,18 +21,17 @@ Run:
 """
 
 import argparse
-import json
 from dataclasses import dataclass
+import json
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 
 from data.silver.config.metric_specs import METRIC_SPECS
-from data.silver.config.schemas import (FACTS_LONG_SCHEMA,
-                                        METRICS_QUARTERLY_SCHEMA,
-                                        METRICS_QUARTERLY_HISTORY_SCHEMA,
-                                        PRICES_DAILY_SCHEMA)
+from data.silver.config.schemas import FACTS_LONG_SCHEMA
+from data.silver.config.schemas import METRICS_QUARTERLY_HISTORY_SCHEMA
+from data.silver.config.schemas import METRICS_QUARTERLY_SCHEMA
+from data.silver.config.schemas import PRICES_DAILY_SCHEMA
 
 
 @dataclass(frozen=True)
@@ -41,12 +40,10 @@ class CheckResult:
   ok: bool
   details: str
 
-
-def _require_columns(df: pd.DataFrame, cols: List[str], name: str) -> None:
+def _require_columns(df: pd.DataFrame, cols: list[str], name: str) -> None:
   missing = [c for c in cols if c not in df.columns]
   if missing:
     raise ValueError(f'[{name}] missing columns: {missing}')
-
 
 def _check_schema(df: pd.DataFrame, schema, name: str) -> CheckResult:
   """
@@ -84,8 +81,7 @@ def _check_schema(df: pd.DataFrame, schema, name: str) -> CheckResult:
 
   return CheckResult(f'{name}_schema', True, 'All schema constraints satisfied')
 
-
-def _assert_unique(df: pd.DataFrame, key_cols: List[str],
+def _assert_unique(df: pd.DataFrame, key_cols: list[str],
                    name: str) -> CheckResult:
   dup = df.duplicated(key_cols, keep=False)
   if dup.any():
@@ -94,7 +90,6 @@ def _assert_unique(df: pd.DataFrame, key_cols: List[str],
     msg = f'Found {n} duplicate rows by key {key_cols}. Sample: {sample}'
     return CheckResult(name, False, msg)
   return CheckResult(name, True, f'Unique by {key_cols}')
-
 
 def _assert_filed_ge_end(df: pd.DataFrame, name: str) -> CheckResult:
   bad = df['filed'] < df['end']
@@ -105,7 +100,6 @@ def _assert_filed_ge_end(df: pd.DataFrame, name: str) -> CheckResult:
     return CheckResult(name, False,
                        f'{n} rows have filed < end. Sample: {sample}')
   return CheckResult(name, True, 'All rows satisfy filed >= end')
-
 
 def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
                         tol: float) -> CheckResult:
@@ -211,7 +205,6 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
       f'All comparable rows pass YTD identity (tol={tol}). '
       f'Compared rows={len(comp)}')
 
-
 def _check_ttm(metrics_q: pd.DataFrame, tol: float) -> CheckResult:
   m = metrics_q.sort_values(['cik10', 'metric', 'end']).copy()
   rolling_result = (m.groupby(
@@ -239,7 +232,6 @@ def _check_ttm(metrics_q: pd.DataFrame, tol: float) -> CheckResult:
       'ttm_check', True, f'All comparable rows pass TTM check (tol={tol}). '
       f'Compared rows={len(comp)}')
 
-
 def _check_capex_abs(metrics_q: pd.DataFrame, eps: float) -> CheckResult:
   cap = metrics_q[metrics_q['metric'] == 'CAPEX'].copy()
   if cap.empty:
@@ -253,9 +245,8 @@ def _check_capex_abs(metrics_q: pd.DataFrame, eps: float) -> CheckResult:
     return CheckResult('capex_abs', False, msg)
   return CheckResult('capex_abs', True, f'All CAPEX q_val >= -{eps}')
 
-
-def _check_prices(prices: pd.DataFrame) -> List[CheckResult]:
-  results: List[CheckResult] = []
+def _check_prices(prices: pd.DataFrame) -> list[CheckResult]:
+  results: list[CheckResult] = []
   _require_columns(prices,
                    ['symbol', 'date', 'open', 'high', 'low', 'close', 'volume'],
                    'prices_daily')
@@ -275,7 +266,6 @@ def _check_prices(prices: pd.DataFrame) -> List[CheckResult]:
     results.append(CheckResult('prices_positive_close', True, 'All close > 0'))
 
   return results
-
 
 def _check_quarterly_completeness(
     companies: pd.DataFrame,
@@ -339,7 +329,6 @@ def _check_quarterly_completeness(
   return CheckResult('quarterly_completeness', True,
                      'All companies have reasonable quarterly coverage')
 
-
 def _manual_spotcheck(metrics_q: pd.DataFrame, fixture_path: Path,
                       tol: float) -> CheckResult:
   """
@@ -381,7 +370,6 @@ def _manual_spotcheck(metrics_q: pd.DataFrame, fixture_path: Path,
     )
   return CheckResult('manual_spotcheck', True,
                      f'All fixture rows match (tol={tol}). Rows={len(merged)}')
-
 
 def main() -> None:
   ap = argparse.ArgumentParser(description='Validate Silver layer outputs')
@@ -441,7 +429,7 @@ def main() -> None:
     meta = json.loads(meta_path.read_text())
     target_date = meta.get('target_date')
 
-  results: List[CheckResult] = []
+  results: list[CheckResult] = []
 
   print(f'Validating Silver layer: {silver_dir}')
   print(f'  Facts: {facts.shape}')
@@ -527,7 +515,6 @@ def main() -> None:
     raise SystemExit(1)
   else:
     print('\n✓ All validation checks passed!')
-
 
 if __name__ == '__main__':
   main()

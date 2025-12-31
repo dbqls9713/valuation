@@ -1,25 +1,28 @@
-'''
+"""
 Growth rate estimation policies.
 
 These policies estimate the initial growth rate (g0) for the DCF model
 based on historical Owner Earnings per share growth.
-'''
+"""
 
-from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from abc import ABC
+from abc import abstractmethod
+from typing import Optional
 
 import pandas as pd
 
-from valuation.domain.types import FundamentalsSlice, PolicyOutput
-from valuation.policies.capex import CapexPolicy, WeightedAverageCapex
+from valuation.domain.types import FundamentalsSlice
+from valuation.domain.types import PolicyOutput
+from valuation.policies.capex import CapexPolicy
+from valuation.policies.capex import WeightedAverageCapex
 
 
 class GrowthPolicy(ABC):
-  '''
+  """
   Base class for growth rate estimation policies.
 
   Subclasses implement compute() to return an initial growth rate.
-  '''
+  """
 
   @abstractmethod
   def compute(
@@ -27,7 +30,7 @@ class GrowthPolicy(ABC):
       data: FundamentalsSlice,
       capex_policy: Optional[CapexPolicy] = None,
   ) -> PolicyOutput[float]:
-    '''
+    """
     Compute initial growth rate for DCF model.
 
     Args:
@@ -36,16 +39,15 @@ class GrowthPolicy(ABC):
 
     Returns:
       PolicyOutput with growth rate and diagnostics
-    '''
-
+    """
 
 class CAGRGrowth(GrowthPolicy):
-  '''
+  """
   CAGR-based growth rate with threshold and clipping.
 
   Calculates Compound Annual Growth Rate of OE per share over a lookback
   period, applies a minimum threshold, and clips to a maximum.
-  '''
+  """
 
   def __init__(
       self,
@@ -54,7 +56,7 @@ class CAGRGrowth(GrowthPolicy):
       clip_min: float = 0.0,
       clip_max: float = 0.18,
   ):
-    '''
+    """
     Initialize CAGR growth policy.
 
     Args:
@@ -62,7 +64,7 @@ class CAGRGrowth(GrowthPolicy):
       threshold: Minimum growth rate to proceed (default: 4%)
       clip_min: Minimum clipped growth rate (default: 0%)
       clip_max: Maximum clipped growth rate (default: 18%)
-    '''
+    """
     self.min_years = min_years
     self.threshold = threshold
     self.clip_min = clip_min
@@ -73,12 +75,12 @@ class CAGRGrowth(GrowthPolicy):
       data: FundamentalsSlice,
       capex_policy: Optional[CapexPolicy] = None,
   ) -> PolicyOutput[float]:
-    '''
+    """
     Compute CAGR of OE per share with threshold and clipping.
 
     Growth is computed using CAPEX calculated by the provided policy
     (or WeightedAverageCapex by default) for consistency with OE0.
-    '''
+    """
     if capex_policy is None:
       capex_policy = WeightedAverageCapex()
 
@@ -156,13 +158,13 @@ class CAGRGrowth(GrowthPolicy):
       self,
       data: FundamentalsSlice,
       capex_policy: CapexPolicy,  # pylint: disable=unused-argument
-  ) -> Tuple[pd.Series, dict]:
-    '''
+  ) -> tuple[pd.Series, dict]:
+    """
     Compute OE per share history using the CAPEX policy.
 
     For consistency, uses the same CAPEX calculation method for
     historical OE as will be used for OE0.
-    '''
+    """
     cfo_series = data.cfo_ttm_history.dropna()
     capex_series = data.capex_ttm_history.dropna()
     shares_series = data.shares_history.dropna()

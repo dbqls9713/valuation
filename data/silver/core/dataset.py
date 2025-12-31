@@ -2,7 +2,7 @@
 Dataset abstraction with schema validation.
 """
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Optional
 
 import pandas as pd
 
@@ -16,15 +16,13 @@ class ColumnSpec:
   unique: bool = False
   description: str = ''
 
-
 @dataclass
 class DatasetSchema:
   """Schema for a dataset."""
   name: str
-  columns: List[ColumnSpec]
-  primary_key: Optional[List[str]] = None
+  columns: list[ColumnSpec]
+  primary_key: Optional[list[str]] = None
   description: str = ''
-
 
 class Dataset:
   """Base dataset with schema validation."""

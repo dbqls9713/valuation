@@ -1,4 +1,4 @@
-'''Gold layer panel builders.'''
+"""Gold layer panel builders."""
 
 from data.gold.panels.valuation import ValuationPanelBuilder
 

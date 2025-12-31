@@ -2,13 +2,13 @@
 Stooq data processing pipeline.
 """
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 
-from data.silver.core.pipeline import Pipeline, PipelineContext
-from data.silver.shared.validators import BasicValidator
 from data.shared.io import ParquetWriter
+from data.silver.core.pipeline import Pipeline
+from data.silver.core.pipeline import PipelineContext
+from data.silver.shared.validators import BasicValidator
 
 
 class StooqPipeline(Pipeline):
@@ -31,7 +31,7 @@ class StooqPipeline(Pipeline):
       self.datasets['prices_daily'] = pd.DataFrame()
       return
 
-    parts: List[pd.DataFrame] = []
+    parts: list[pd.DataFrame] = []
     for p in csv_files:
       try:
         sym = p.stem.upper()
@@ -86,7 +86,7 @@ class StooqPipeline(Pipeline):
     csv_files = self._get_csv_files()
     self.writer.write(prices, output_path, inputs=csv_files, metadata=metadata)
 
-  def _get_csv_files(self) -> List[Path]:
+  def _get_csv_files(self) -> list[Path]:
     """Get CSV files."""
     if not self.stooq_dir.exists():
       return []

@@ -1,4 +1,4 @@
-'''
+"""
 Valuation framework with strategy/policy-based architecture.
 
 This package provides a modular DCF valuation system where each component
@@ -12,4 +12,4 @@ Usage:
 
   config = ScenarioConfig.default()
   result = run_valuation(ticker='GOOGL', as_of_date='2024-12-31', config=config)
-'''
+"""

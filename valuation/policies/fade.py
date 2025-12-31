@@ -1,4 +1,4 @@
-'''
+"""
 Growth fade policies.
 
 These policies determine how growth rate transitions from initial (g0)
@@ -6,21 +6,21 @@ to terminal (g_end) over the explicit forecast period.
 
 The policy returns a sequence of growth rates [g1, g2, ..., gN] for each
 year of the explicit forecast period.
-'''
+"""
 
-from abc import ABC, abstractmethod
-from typing import List
+from abc import ABC
+from abc import abstractmethod
 
 from valuation.domain.types import PolicyOutput
 
 
 class FadePolicy(ABC):
-  '''
+  """
   Base class for growth fade policies.
 
   Subclasses implement compute() to return the full sequence of growth rates
   for the explicit forecast period.
-  '''
+  """
 
   @abstractmethod
   def compute(
@@ -28,8 +28,8 @@ class FadePolicy(ABC):
       g0: float,
       g_terminal: float,
       n_years: int,
-  ) -> PolicyOutput[List[float]]:
-    '''
+  ) -> PolicyOutput[list[float]]:
+    """
     Compute growth rate sequence for explicit forecast period.
 
     Args:
@@ -39,24 +39,23 @@ class FadePolicy(ABC):
 
     Returns:
       PolicyOutput with list of growth rates [g_year1, g_year2, ..., g_yearN]
-    '''
-
+    """
 
 class LinearFade(FadePolicy):
-  '''
+  """
   Linear fade from g0 to g_end.
 
   Growth rates interpolate linearly from g0 (year 1) to g_end (year N).
   g_end is calculated as g_terminal + g_end_spread.
-  '''
+  """
 
   def __init__(self, g_end_spread: float = 0.01):
-    '''
+    """
     Initialize linear fade policy.
 
     Args:
       g_end_spread: Spread above terminal rate for g_end (default: 1%)
-    '''
+    """
     self.g_end_spread = g_end_spread
 
   def compute(
@@ -64,8 +63,8 @@ class LinearFade(FadePolicy):
       g0: float,
       g_terminal: float,
       n_years: int,
-  ) -> PolicyOutput[List[float]]:
-    '''Compute linearly fading growth rates.'''
+  ) -> PolicyOutput[list[float]]:
+    """Compute linearly fading growth rates."""
     g_end = g_terminal + self.g_end_spread
 
     if n_years < 1:
@@ -92,22 +91,21 @@ class LinearFade(FadePolicy):
                             'g_terminal': g_terminal,
                         })
 
-
 class GeometricFade(FadePolicy):
-  '''
+  """
   Geometric (exponential) fade from g0 to g_end.
 
   Growth rates decay geometrically, which produces a smoother transition
   that front-loads the decline (faster initial drop, slower later).
-  '''
+  """
 
   def __init__(self, g_end_spread: float = 0.01):
-    '''
+    """
     Initialize geometric fade policy.
 
     Args:
       g_end_spread: Spread above terminal rate for g_end (default: 1%)
-    '''
+    """
     self.g_end_spread = g_end_spread
 
   def compute(
@@ -115,8 +113,8 @@ class GeometricFade(FadePolicy):
       g0: float,
       g_terminal: float,
       n_years: int,
-  ) -> PolicyOutput[List[float]]:
-    '''Compute geometrically fading growth rates.'''
+  ) -> PolicyOutput[list[float]]:
+    """Compute geometrically fading growth rates."""
     g_end = g_terminal + self.g_end_spread
 
     if n_years < 1:
@@ -145,23 +143,22 @@ class GeometricFade(FadePolicy):
                             'decay_ratio': ratio,
                         })
 
-
 class StepThenFade(FadePolicy):
-  '''
+  """
   Step fade: maintain g0 for initial years, then linearly fade.
 
   Growth stays at g0 for high_growth_years, then linearly fades
   to g_end in the remaining years.
-  '''
+  """
 
   def __init__(self, high_growth_years: int = 5, g_end_spread: float = 0.01):
-    '''
+    """
     Initialize step-then-fade policy.
 
     Args:
       high_growth_years: Years to keep initial growth (default: 5)
       g_end_spread: Spread above terminal (default: 1%)
-    '''
+    """
     self.high_growth_years = high_growth_years
     self.g_end_spread = g_end_spread
 
@@ -170,8 +167,8 @@ class StepThenFade(FadePolicy):
       g0: float,
       g_terminal: float,
       n_years: int,
-  ) -> PolicyOutput[List[float]]:
-    '''Compute step-then-fade growth rates.'''
+  ) -> PolicyOutput[list[float]]:
+    """Compute step-then-fade growth rates."""
     g_end = g_terminal + self.g_end_spread
     hg_years = min(self.high_growth_years, n_years)
 
@@ -195,7 +192,6 @@ class StepThenFade(FadePolicy):
                             'g_end': g_end,
                             'g_terminal': g_terminal,
                         })
-
 
 # Backwards compatibility alias
 StepFade = StepThenFade

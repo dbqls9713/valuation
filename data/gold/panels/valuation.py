@@ -1,35 +1,34 @@
-'''
+"""
 Valuation panel builder.
 
 Builds the model-ready valuation panel for DCF analysis:
 - Quarterly and TTM metrics (CFO, CAPEX, Shares)
 - Point-in-time prices
 - Market capitalization
-'''
+"""
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import pandas as pd
 
-from data.gold.config.schemas import VALUATION_PANEL_SCHEMA, PanelSchema
-from data.gold.shared.transforms import (
-    pivot_metrics_wide,
-    join_prices_pit,
-    calculate_market_cap,
-)
+from data.gold.config.schemas import PanelSchema
+from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
+from data.gold.shared.transforms import calculate_market_cap
+from data.gold.shared.transforms import join_prices_pit
+from data.gold.shared.transforms import pivot_metrics_wide
 from data.shared.io import ParquetWriter
 
 
 class ValuationPanelBuilder:
-  '''
+  """
   Builds the valuation panel from Silver layer tables.
 
   Usage:
     builder = ValuationPanelBuilder(silver_dir, gold_dir)
     panel = builder.build()
     builder.save()
-  '''
+  """
 
   REQUIRED_METRICS = ['CFO', 'CAPEX', 'SHARES']
 
@@ -39,14 +38,14 @@ class ValuationPanelBuilder:
       gold_dir: Path,
       min_date: Optional[str] = None,
   ):
-    '''
+    """
     Initialize valuation panel builder.
 
     Args:
       silver_dir: Path to Silver layer output directory
       gold_dir: Path to Gold layer output directory
       min_date: Optional minimum date filter (YYYY-MM-DD)
-    '''
+    """
     self.silver_dir = Path(silver_dir)
     self.gold_dir = Path(gold_dir)
     self.min_date = min_date
@@ -54,12 +53,12 @@ class ValuationPanelBuilder:
     self.panel: Optional[pd.DataFrame] = None
 
   def build(self) -> pd.DataFrame:
-    '''
+    """
     Build the valuation panel.
 
     Returns:
       Wide-format panel DataFrame
-    '''
+    """
     companies = pd.read_parquet(self.silver_dir / 'sec' / 'companies.parquet')
     metrics_q = pd.read_parquet(self.silver_dir / 'sec' /
                                 'metrics_quarterly.parquet')
@@ -89,29 +88,29 @@ class ValuationPanelBuilder:
     return self.panel
 
   def _filter_complete_rows(self, df: pd.DataFrame) -> pd.DataFrame:
-    '''Keep only rows with both CFO_TTM and CAPEX_TTM.'''
+    """Keep only rows with both CFO_TTM and CAPEX_TTM."""
     mask = df['cfo_ttm'].notna() & df['capex_ttm'].notna()
     return df[mask].copy()
 
-  def validate(self) -> List[str]:
-    '''
+  def validate(self) -> list[str]:
+    """
     Validate the built panel against schema.
 
     Returns:
       List of validation errors (empty if valid)
-    '''
+    """
     if self.panel is None:
       return ['Panel not built yet. Call build() first.']
 
     return self.schema.validate(self.panel)
 
   def save(self) -> Path:
-    '''
+    """
     Save the panel to Gold output directory.
 
     Returns:
       Path to saved parquet file
-    '''
+    """
     if self.panel is None:
       raise ValueError('Panel not built. Call build() first.')
 
@@ -139,7 +138,7 @@ class ValuationPanelBuilder:
     return output_path
 
   def summary(self) -> str:
-    '''Return summary of the built panel.'''
+    """Return summary of the built panel."""
     if self.panel is None:
       return 'Panel not built yet.'
 

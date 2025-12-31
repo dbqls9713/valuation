@@ -1,9 +1,9 @@
 """
 Validator abstraction.
 """
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
 from dataclasses import dataclass
-from typing import List
 
 import pandas as pd
 
@@ -12,9 +12,8 @@ import pandas as pd
 class ValidationResult:
   """Result of validation."""
   is_valid: bool
-  errors: List[str]
-  warnings: List[str]
-
+  errors: list[str]
+  warnings: list[str]
 
 class Validator(ABC):
   """Base validator."""

@@ -1,4 +1,4 @@
-'''
+"""
 Validate Gold layer outputs.
 
 Validates all panels against their schemas:
@@ -9,17 +9,17 @@ Validates all panels against their schemas:
 Usage:
   python -m data.gold.validate
   python -m data.gold.validate --gold-dir data/gold/out
-'''
+"""
 
 import argparse
-import logging
 from dataclasses import dataclass
+import logging
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 
-from data.gold.config.schemas import VALUATION_PANEL_SCHEMA, PanelSchema
+from data.gold.config.schemas import PanelSchema
+from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,20 +28,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 @dataclass(frozen=True)
 class CheckResult:
-  '''Result of a single validation check.'''
+  """Result of a single validation check."""
   name: str
   ok: bool
   details: str
 
-
 def validate_panel(
     df: pd.DataFrame,
     schema: PanelSchema,
-) -> List[CheckResult]:
-  '''
+) -> list[CheckResult]:
+  """
   Validate a panel DataFrame against its schema.
 
   Args:
@@ -50,7 +48,7 @@ def validate_panel(
 
   Returns:
     List of CheckResult objects
-  '''
+  """
   results = []
 
   expected_cols = set(schema.column_names())
@@ -107,9 +105,8 @@ def validate_panel(
 
   return results
 
-
-def _validate_valuation_panel(gold_dir: Path) -> List[CheckResult]:
-  '''Validate valuation_panel.parquet.'''
+def _validate_valuation_panel(gold_dir: Path) -> list[CheckResult]:
+  """Validate valuation_panel.parquet."""
   path = gold_dir / 'valuation_panel.parquet'
   if not path.exists():
     return [
@@ -153,9 +150,8 @@ def _validate_valuation_panel(gold_dir: Path) -> List[CheckResult]:
 
   return results
 
-
 def main() -> None:
-  '''CLI entrypoint.'''
+  """CLI entrypoint."""
   parser = argparse.ArgumentParser(description='Validate Gold layer outputs')
   parser.add_argument(
       '--gold-dir',
@@ -167,7 +163,7 @@ def main() -> None:
 
   logger.info('Validating Gold layer: %s', args.gold_dir)
 
-  all_results: List[CheckResult] = []
+  all_results: list[CheckResult] = []
   all_results.extend(_validate_valuation_panel(args.gold_dir))
 
   passed = sum(1 for r in all_results if r.ok)
@@ -185,7 +181,6 @@ def main() -> None:
 
   if failed > 0:
     raise SystemExit(1)
-
 
 if __name__ == '__main__':
   main()

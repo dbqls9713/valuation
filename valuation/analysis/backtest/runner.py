@@ -1,4 +1,4 @@
-'''
+"""
 Backtest runner for comparing valuation scenarios over time.
 
 This module provides the BacktestRunner class which:
@@ -19,12 +19,12 @@ Usage:
   )
   results = runner.run()
   results.to_csv('backtest_results.csv', index=False)
-'''
+"""
 
 import argparse
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import pandas as pd
 
@@ -34,9 +34,8 @@ from valuation.scenarios.config import ScenarioConfig
 
 logger = logging.getLogger(__name__)
 
-
 class BacktestRunner:
-  '''
+  """
   Run valuations across multiple dates and scenarios.
 
   Supports:
@@ -44,18 +43,18 @@ class BacktestRunner:
   - Multiple tickers (batch mode)
   - Verbose progress output
   - Long-form output for easy analysis
-  '''
+  """
 
   def __init__(
       self,
       ticker: str,
       start_date: str,
       end_date: str,
-      scenarios: Optional[List[ScenarioConfig]] = None,
+      scenarios: Optional[list[ScenarioConfig]] = None,
       gold_path: Path = Path('data/gold/out/valuation_panel.parquet'),
       silver_dir: Path = Path('data/silver/out'),
   ):
-    '''
+    """
     Initialize backtest runner.
 
     Args:
@@ -65,7 +64,7 @@ class BacktestRunner:
       scenarios: List of ScenarioConfig (default: just default)
       gold_path: Path to Gold panel parquet
       silver_dir: Path to Silver layer output directory
-    '''
+    """
     self.ticker = ticker
     self.start_date = pd.Timestamp(start_date)
     self.end_date = pd.Timestamp(end_date)
@@ -73,8 +72,8 @@ class BacktestRunner:
     self.gold_path = gold_path
     self.silver_dir = silver_dir
 
-  def _generate_quarter_ends(self) -> List[pd.Timestamp]:
-    '''Generate list of quarter-end dates.'''
+  def _generate_quarter_ends(self) -> list[pd.Timestamp]:
+    """Generate list of quarter-end dates."""
     quarters = []
     current = self.start_date
 
@@ -91,7 +90,7 @@ class BacktestRunner:
     return sorted(quarters)
 
   def run(self, verbose: bool = True) -> pd.DataFrame:
-    '''
+    """
     Run backtest across all quarters and scenarios.
 
     Args:
@@ -106,7 +105,7 @@ class BacktestRunner:
       - market_price: Market price
       - price_to_iv: Market / IV ratio
       - ... (all diagnostics)
-    '''
+    """
     quarters = self._generate_quarter_ends()
     results = []
 
@@ -165,17 +164,16 @@ class BacktestRunner:
 
     return pd.DataFrame(results)
 
-
 def run_batch_backtest(
-    tickers: List[str],
+    tickers: list[str],
     start_date: str,
     end_date: str,
-    scenarios: List[ScenarioConfig],
+    scenarios: list[ScenarioConfig],
     gold_path: Path = Path('data/gold/out/valuation_panel.parquet'),
     silver_dir: Path = Path('data/silver/out'),
     verbose: bool = True,
 ) -> pd.DataFrame:
-  '''
+  """
   Run backtest for multiple tickers.
 
   Args:
@@ -189,7 +187,7 @@ def run_batch_backtest(
 
   Returns:
     Combined long-form DataFrame for all tickers
-  '''
+  """
   all_results = []
 
   for ticker in tickers:
@@ -220,9 +218,8 @@ def run_batch_backtest(
 
   return pd.concat(all_results, ignore_index=True)
 
-
 def main():
-  '''CLI entrypoint for backtest runner.'''
+  """CLI entrypoint for backtest runner."""
   parser = argparse.ArgumentParser(description='Run valuation backtest')
   parser.add_argument('--ticker',
                       type=str,
@@ -283,7 +280,6 @@ def main():
   logger.info(separator)
   logger.info('\n%s', summary.to_string())
   logger.info('\nResults saved to: %s', args.output)
-
 
 if __name__ == '__main__':
   logging.basicConfig(

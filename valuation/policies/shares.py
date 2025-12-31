@@ -1,27 +1,29 @@
-'''
+"""
 Share change / buyback rate policies.
 
 These policies estimate the annual share reduction rate (buyback rate)
 from historical share count data.
-'''
+"""
 
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
 
 import pandas as pd
 
-from valuation.domain.types import FundamentalsSlice, PolicyOutput
+from valuation.domain.types import FundamentalsSlice
+from valuation.domain.types import PolicyOutput
 
 
 class SharePolicy(ABC):
-  '''
+  """
   Base class for share change policies.
 
   Subclasses implement compute() to return an annual share reduction rate.
-  '''
+  """
 
   @abstractmethod
   def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
-    '''
+    """
     Compute annual share reduction rate (buyback rate).
 
     Args:
@@ -31,27 +33,26 @@ class SharePolicy(ABC):
       PolicyOutput with buyback rate and diagnostics
       Positive rate means share reduction (buybacks)
       Negative rate means share dilution (issuance)
-    '''
-
+    """
 
 class AvgShareChange(SharePolicy):
-  '''
+  """
   Average share change rate over lookback period.
 
   Computes CAGR of share reduction over the specified years.
-  '''
+  """
 
   def __init__(self, years: int = 5):
-    '''
+    """
     Initialize average share change policy.
 
     Args:
       years: Lookback period for averaging (default: 5)
-    '''
+    """
     self.years = years
 
   def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
-    '''Compute CAGR of share change over lookback period.'''
+    """Compute CAGR of share change over lookback period."""
     shares_series = data.shares_history.dropna()
 
     if shares_series.empty:

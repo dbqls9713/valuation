@@ -1,4 +1,4 @@
-'''
+"""
 Single-company valuation entrypoint.
 
 This module provides the main entry point for running valuations. It:
@@ -17,30 +17,27 @@ Usage:
     config=ScenarioConfig.default(),
   )
   print(f"IV: ${result.iv_per_share:.2f}")
-'''
+"""
 
 import argparse
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import pandas as pd
 
-from valuation.domain.types import (
-    FundamentalsSlice,
-    MarketSlice,
-    PreparedInputs,
-    ValuationResult,
-)
+from valuation.domain.types import FundamentalsSlice
+from valuation.domain.types import MarketSlice
+from valuation.domain.types import PreparedInputs
+from valuation.domain.types import ValuationResult
 from valuation.engine.dcf import compute_intrinsic_value
 from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
 
 logger = logging.getLogger(__name__)
 
-
 def load_gold_panel(gold_path: Path) -> pd.DataFrame:
-  '''Load and prepare Gold panel data.'''
+  """Load and prepare Gold panel data."""
   if not gold_path.exists():
     raise FileNotFoundError(f'Gold panel not found: {gold_path}. '
                             'Run "python -m data.gold.build" first.')
@@ -50,14 +47,13 @@ def load_gold_panel(gold_path: Path) -> pd.DataFrame:
   panel['filed'] = pd.to_datetime(panel['filed'])
   return panel
 
-
 def adjust_for_splits(panel: pd.DataFrame) -> pd.DataFrame:
-  '''
+  """
   Adjust shares for stock splits across all tickers.
 
   Must be applied before PIT filtering to ensure historical shares
   are on the same basis as current prices.
-  '''
+  """
   adjusted_parts = []
 
   for ticker in panel['ticker'].unique():
@@ -93,13 +89,12 @@ def adjust_for_splits(panel: pd.DataFrame) -> pd.DataFrame:
   result: pd.DataFrame = pd.concat(adjusted_parts, ignore_index=True)
   return result
 
-
 def get_price_after_filing(
     ticker: str,
     filed_date: pd.Timestamp,
     silver_dir: Path,
 ) -> MarketSlice:
-  '''
+  """
   Get market price on first trading day after filing date.
 
   Args:
@@ -109,7 +104,7 @@ def get_price_after_filing(
 
   Returns:
     MarketSlice with price and date
-  '''
+  """
   prices_path = silver_dir / 'stooq' / 'prices_daily.parquet'
   if not prices_path.exists():
     raise FileNotFoundError(f'Price data not found: {prices_path}')
@@ -139,7 +134,6 @@ def get_price_after_filing(
   row = after_filing.iloc[0]
   return MarketSlice(price=float(row['close']), price_date=row['date'])
 
-
 def run_valuation(
     ticker: str,
     as_of_date: str,
@@ -148,7 +142,7 @@ def run_valuation(
     silver_dir: Path = Path('data/silver/out'),
     include_market_price: bool = True,
 ) -> ValuationResult:
-  '''
+  """
   Run valuation for a single ticker at a specific date.
 
   Args:
@@ -161,7 +155,7 @@ def run_valuation(
 
   Returns:
     ValuationResult with IV, diagnostics, and optional market comparison
-  '''
+  """
   if config is None:
     config = ScenarioConfig.default()
 
@@ -173,7 +167,7 @@ def run_valuation(
   data = FundamentalsSlice.from_panel(panel, ticker, as_of)
 
   policies = create_policies(config)
-  all_diag: Dict[str, str] = {
+  all_diag: dict[str, str] = {
       'scenario': config.name,
       'ticker': ticker,
       'as_of_date': str(as_of.date()),
@@ -264,9 +258,8 @@ def run_valuation(
       diag=all_diag,
   )
 
-
 def main() -> None:
-  '''CLI entrypoint.'''
+  """CLI entrypoint."""
   parser = argparse.ArgumentParser(description='Run DCF valuation')
   parser.add_argument('--ticker',
                       type=str,
@@ -345,7 +338,6 @@ def main() -> None:
       logger.info('  Margin of Safety: %.2f%%', result.margin_of_safety * 100)
 
   logger.info('%s\n', separator)
-
 
 if __name__ == '__main__':
   logging.basicConfig(

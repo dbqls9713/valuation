@@ -1,4 +1,4 @@
-'''
+"""
 Gold layer: Model-ready panels.
 
 Transforms Silver layer tables into analysis-ready wide-format panels.
@@ -13,10 +13,10 @@ Usage:
   builder = ValuationPanelBuilder(silver_dir, gold_dir)
   panel = builder.build()
   builder.save()
-'''
+"""
 
-from data.gold.panels import ValuationPanelBuilder
 from data.gold.config import VALUATION_PANEL_SCHEMA
+from data.gold.panels import ValuationPanelBuilder
 
 __all__ = [
     'ValuationPanelBuilder',

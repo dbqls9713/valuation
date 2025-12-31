@@ -1,4 +1,4 @@
-'''
+"""
 Run backtest using scenario config files (JSON/YAML).
 
 This script enables large-scale experiments by:
@@ -35,22 +35,20 @@ Usage:
     --end-date 2024-12-31 \
     --config-dir scenarios/grid_search \
     --output results/grid_search_aapl.csv
-'''
+"""
 
 import argparse
 import json
 import logging
 from pathlib import Path
-from typing import List
 
 from valuation.analysis.backtest.runner import run_batch_backtest
 from valuation.scenarios.config import ScenarioConfig
 
 logger = logging.getLogger(__name__)
 
-
-def load_configs_from_files(config_paths: List[Path]) -> List[ScenarioConfig]:
-  '''
+def load_configs_from_files(config_paths: list[Path]) -> list[ScenarioConfig]:
+  """
   Load scenario configs from JSON files.
 
   Args:
@@ -58,7 +56,7 @@ def load_configs_from_files(config_paths: List[Path]) -> List[ScenarioConfig]:
 
   Returns:
     List of ScenarioConfig objects
-  '''
+  """
   configs = []
   for path in config_paths:
     try:
@@ -72,9 +70,8 @@ def load_configs_from_files(config_paths: List[Path]) -> List[ScenarioConfig]:
 
   return configs
 
-
-def load_configs_from_dir(config_dir: Path) -> List[ScenarioConfig]:
-  '''
+def load_configs_from_dir(config_dir: Path) -> list[ScenarioConfig]:
+  """
   Load all JSON configs from a directory.
 
   Args:
@@ -82,13 +79,12 @@ def load_configs_from_dir(config_dir: Path) -> List[ScenarioConfig]:
 
   Returns:
     List of ScenarioConfig objects
-  '''
+  """
   json_files = sorted(config_dir.glob('*.json'))
   return load_configs_from_files(json_files)
 
-
 def main():
-  '''CLI entrypoint for backtest from configs.'''
+  """CLI entrypoint for backtest from configs."""
   parser = argparse.ArgumentParser(
       description='Run backtest using JSON config files')
   parser.add_argument('--ticker',
@@ -168,7 +164,6 @@ def main():
   logger.info('Results saved to: %s', args.output)
   logger.info('Total rows: %d', len(results))
   logger.info('=' * 70)
-
 
 if __name__ == '__main__':
   logging.basicConfig(

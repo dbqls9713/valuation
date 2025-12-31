@@ -1,10 +1,12 @@
 """
 Pipeline abstraction for Silver layer data processing.
 """
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from abc import ABC
+from abc import abstractmethod
+from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
-from typing import Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -14,16 +16,16 @@ class PipelineContext:
   """Context shared across pipeline stages."""
   bronze_dir: Path
   silver_dir: Path
-  metadata: Dict = field(default_factory=dict)
+  metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class PipelineResult:
   """Result of pipeline execution."""
   success: bool
-  datasets: Dict[str, pd.DataFrame]
-  metadata: Dict
-  errors: List[str]
+  datasets: dict[str, pd.DataFrame]
+  metadata: dict[str, Any]
+  errors: list[str]
 
 
 class Pipeline(ABC):
@@ -31,8 +33,8 @@ class Pipeline(ABC):
 
   def __init__(self, context: PipelineContext):
     self.context = context
-    self.datasets: Dict[str, pd.DataFrame] = {}
-    self.errors: List[str] = []
+    self.datasets: dict[str, pd.DataFrame] = {}
+    self.errors: list[str] = []
 
   @abstractmethod
   def extract(self) -> None:

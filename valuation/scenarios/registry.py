@@ -1,4 +1,4 @@
-'''
+"""
 Policy registry for mapping string names to policy factories.
 
 This enables scenarios to be configured with string names (YAML/JSON friendly)
@@ -21,29 +21,30 @@ Example:
     return MyNewCapex(param1=value1)
 
   CAPEX_POLICIES['my_new_capex'] = _my_new_capex
-'''
+"""
 
-from typing import Any, Callable, Dict, List, cast
+from collections.abc import Callable
+from typing import Any, cast
 
-from valuation.policies.capex import (
-    CapexPolicy,
-    RawTTMCapex,
-    WeightedAverageCapex,
-    IntensityClippedCapex,
-)
-from valuation.policies.growth import GrowthPolicy, CAGRGrowth
-from valuation.policies.fade import (
-    FadePolicy,
-    LinearFade,
-    GeometricFade,
-    StepThenFade,
-)
-from valuation.policies.shares import SharePolicy, AvgShareChange
-from valuation.policies.terminal import TerminalPolicy, GordonTerminal
-from valuation.policies.discount import DiscountPolicy, FixedRate
+from valuation.policies.capex import CapexPolicy
+from valuation.policies.capex import IntensityClippedCapex
+from valuation.policies.capex import RawTTMCapex
+from valuation.policies.capex import WeightedAverageCapex
+from valuation.policies.discount import DiscountPolicy
+from valuation.policies.discount import FixedRate
+from valuation.policies.fade import FadePolicy
+from valuation.policies.fade import GeometricFade
+from valuation.policies.fade import LinearFade
+from valuation.policies.fade import StepThenFade
+from valuation.policies.growth import CAGRGrowth
+from valuation.policies.growth import GrowthPolicy
+from valuation.policies.shares import AvgShareChange
+from valuation.policies.shares import SharePolicy
+from valuation.policies.terminal import GordonTerminal
+from valuation.policies.terminal import TerminalPolicy
 from valuation.scenarios.config import ScenarioConfig
 
-CAPEX_POLICIES: Dict[str, Callable[[], CapexPolicy]] = {
+CAPEX_POLICIES: dict[str, Callable[[], CapexPolicy]] = {
     'raw_ttm':
         RawTTMCapex,
     'weighted_3y_123':
@@ -56,7 +57,7 @@ CAPEX_POLICIES: Dict[str, Callable[[], CapexPolicy]] = {
         lambda: IntensityClippedCapex(percentile=80, reduction_factor=0.5),
 }
 
-GROWTH_POLICIES: Dict[str, Callable[[], GrowthPolicy]] = {
+GROWTH_POLICIES: dict[str, Callable[[], GrowthPolicy]] = {
     'cagr_3y_clip':
         lambda: CAGRGrowth(
             min_years=3, threshold=0.0, clip_min=0.0, clip_max=0.18),
@@ -71,7 +72,7 @@ GROWTH_POLICIES: Dict[str, Callable[[], GrowthPolicy]] = {
             min_years=5, threshold=0.0, clip_min=0.0, clip_max=0.18),
 }
 
-FADE_POLICIES: Dict[str, Callable[[], FadePolicy]] = {
+FADE_POLICIES: dict[str, Callable[[], FadePolicy]] = {
     'linear': lambda: LinearFade(g_end_spread=0.01),
     'linear_0p02': lambda: LinearFade(g_end_spread=0.02),
     'geometric': lambda: GeometricFade(g_end_spread=0.01),
@@ -79,19 +80,19 @@ FADE_POLICIES: Dict[str, Callable[[], FadePolicy]] = {
     'step_3y': lambda: StepThenFade(high_growth_years=3, g_end_spread=0.01),
 }
 
-SHARE_POLICIES: Dict[str, Callable[[], SharePolicy]] = {
+SHARE_POLICIES: dict[str, Callable[[], SharePolicy]] = {
     'avg_5y': lambda: AvgShareChange(years=5),
     'avg_3y': lambda: AvgShareChange(years=3),
     'avg_10y': lambda: AvgShareChange(years=10),
 }
 
-TERMINAL_POLICIES: Dict[str, Callable[[], TerminalPolicy]] = {
+TERMINAL_POLICIES: dict[str, Callable[[], TerminalPolicy]] = {
     'gordon': lambda: GordonTerminal(g_terminal=0.03),
     'gordon_2pct': lambda: GordonTerminal(g_terminal=0.02),
     'gordon_4pct': lambda: GordonTerminal(g_terminal=0.04),
 }
 
-DISCOUNT_POLICIES: Dict[str, Callable[[], DiscountPolicy]] = {
+DISCOUNT_POLICIES: dict[str, Callable[[], DiscountPolicy]] = {
     'fixed_0p06': lambda: FixedRate(rate=0.06),
     'fixed_0p07': lambda: FixedRate(rate=0.07),
     'fixed_0p08': lambda: FixedRate(rate=0.08),
@@ -110,9 +111,8 @@ POLICY_REGISTRY = {
     'discount': DISCOUNT_POLICIES,
 }
 
-
-def create_policies(config: ScenarioConfig) -> Dict[str, Any]:
-  '''
+def create_policies(config: ScenarioConfig) -> dict[str, Any]:
+  """
   Create policy instances from scenario configuration.
 
   Args:
@@ -129,7 +129,7 @@ def create_policies(config: ScenarioConfig) -> Dict[str, Any]:
 
   Raises:
     KeyError: If a policy name is not found in the registry
-  '''
+  """
   try:
     capex_factory = CAPEX_POLICIES[config.capex]
   except KeyError as e:
@@ -175,16 +175,15 @@ def create_policies(config: ScenarioConfig) -> Dict[str, Any]:
       'discount': discount_factory(),
   }
 
-
-def list_policies() -> Dict[str, List[str]]:
-  '''
+def list_policies() -> dict[str, list[str]]:
+  """
   List all available policies by category.
 
   Returns:
     Dictionary mapping category names to list of policy names
-  '''
-  result: Dict[str, List[str]] = {}
+  """
+  result: dict[str, list[str]] = {}
   for category, policies_dict in POLICY_REGISTRY.items():
-    policy_dict = cast(Dict[str, object], policies_dict)
+    policy_dict = cast(dict[str, object], policies_dict)
     result[category] = list(policy_dict.keys())
   return result

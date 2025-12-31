@@ -1,4 +1,4 @@
-'''
+"""
 Batch valuation for multiple tickers at a single point in time.
 
 This module provides tools to:
@@ -31,13 +31,13 @@ Usage (Python API):
     config=ScenarioConfig.default(),
   )
   df.to_csv('results.csv', index=False)
-'''
+"""
 
 import argparse
+from collections.abc import Sequence
 import logging
-import traceback
 from pathlib import Path
-from typing import List
+import traceback
 
 import pandas as pd
 
@@ -47,14 +47,13 @@ from valuation.scenarios.config import ScenarioConfig
 
 logger = logging.getLogger(__name__)
 
-
 def _result_to_dict(
     ticker: str,
     as_of_date: str,
     scenario_name: str,
     result: ValuationResult,
 ) -> dict:
-  '''Convert ValuationResult to flat dictionary for DataFrame row.'''
+  """Convert ValuationResult to flat dictionary for DataFrame row."""
   row = {
       'ticker': ticker,
       'as_of_date': as_of_date,
@@ -70,16 +69,15 @@ def _result_to_dict(
 
   return row
 
-
 def batch_valuation(
-    tickers: List[str],
+    tickers: Sequence[str],
     as_of_date: str,
     config: ScenarioConfig,
     gold_path: Path = Path('data/gold/out/valuation_panel.parquet'),
     silver_dir: Path = Path('data/silver/out'),
     verbose: bool = False,
 ) -> pd.DataFrame:
-  '''
+  """
   Run valuation for multiple tickers at a single date.
 
   Args:
@@ -103,7 +101,7 @@ def batch_valuation(
 
   Raises:
     ValueError: If no successful results
-  '''
+  """
   results = []
 
   for i, ticker in enumerate(tickers, 1):
@@ -140,9 +138,8 @@ def batch_valuation(
 
   return pd.DataFrame(results)
 
-
-def _load_tickers_from_file(file_path: Path) -> List[str]:
-  '''Load ticker symbols from text file (one per line, # for comments).'''
+def _load_tickers_from_file(file_path: Path) -> list[str]:
+  """Load ticker symbols from text file (one per line, # for comments)."""
   with open(file_path, 'r', encoding='utf-8') as f:
     tickers = [
         line.strip() for line in f
@@ -150,9 +147,8 @@ def _load_tickers_from_file(file_path: Path) -> List[str]:
     ]
   return tickers
 
-
 def _print_summary(df: pd.DataFrame) -> None:
-  '''Print summary statistics for batch valuation results.'''
+  """Print summary statistics for batch valuation results."""
   total = len(df)
   has_price = df['market_price'].notna().sum()
 
@@ -207,9 +203,8 @@ def _print_summary(df: pd.DataFrame) -> None:
 
   logger.info('=' * 70)
 
-
 def main() -> None:
-  '''CLI entrypoint for batch valuation.'''
+  """CLI entrypoint for batch valuation."""
   parser = argparse.ArgumentParser(
       description='Batch valuation for multiple tickers',
       formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -306,7 +301,6 @@ def main() -> None:
   logger.info('Saved %d results to %s', len(results), args.output)
 
   _print_summary(results)
-
 
 if __name__ == '__main__':
   main()

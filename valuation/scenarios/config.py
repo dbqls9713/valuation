@@ -1,18 +1,20 @@
-'''
+"""
 Scenario configuration for valuation experiments.
 
 ScenarioConfig is a serializable (YAML/JSON-friendly) configuration class
 that specifies which policies to use for each component of the valuation.
-'''
+"""
 
-from dataclasses import dataclass, field, asdict
-from typing import Any, Dict
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import field
 import json
+from typing import Any
 
 
 @dataclass
 class ScenarioConfig:
-  '''
+  """
   Configuration for a valuation scenario.
 
   All fields are strings (policy names) that map to factories in the registry.
@@ -28,7 +30,7 @@ class ScenarioConfig:
     discount: Discount policy name (e.g., 'fixed_0p10', 'fixed_0p06')
     n_years: Number of explicit forecast years
     policy_params: Optional dict of policy-specific parameters
-  '''
+  """
   name: str = 'default'
   capex: str = 'weighted_3y_123'
   growth: str = 'cagr_3y_clip'
@@ -37,11 +39,11 @@ class ScenarioConfig:
   terminal: str = 'gordon'
   discount: str = 'fixed_0p10'
   n_years: int = 10
-  policy_params: Dict[str, Any] = field(default_factory=dict)
+  policy_params: dict[str, Any] = field(default_factory=dict)
 
   @classmethod
   def default(cls) -> 'ScenarioConfig':
-    '''
+    """
     Create default scenario configuration.
 
     Uses:
@@ -52,7 +54,7 @@ class ScenarioConfig:
       - Gordon terminal at 3%
       - Fixed 10% discount rate
       - 10-year forecast
-    '''
+    """
     return cls(
         name='default',
         capex='weighted_3y_123',
@@ -66,7 +68,7 @@ class ScenarioConfig:
 
   @classmethod
   def raw_capex(cls) -> 'ScenarioConfig':
-    '''Scenario using raw TTM CAPEX.'''
+    """Scenario using raw TTM CAPEX."""
     return cls(
         name='raw_capex',
         capex='raw_ttm',
@@ -80,7 +82,7 @@ class ScenarioConfig:
 
   @classmethod
   def clipped_capex(cls) -> 'ScenarioConfig':
-    '''Scenario using intensity-clipped CAPEX.'''
+    """Scenario using intensity-clipped CAPEX."""
     return cls(
         name='clipped_capex',
         capex='intensity_clipped',
@@ -94,7 +96,7 @@ class ScenarioConfig:
 
   @classmethod
   def discount_6pct(cls) -> 'ScenarioConfig':
-    '''Scenario with 6% discount rate.'''
+    """Scenario with 6% discount rate."""
     return cls(
         name='discount_6pct',
         capex='weighted_3y_123',
@@ -106,20 +108,20 @@ class ScenarioConfig:
         n_years=10,
     )
 
-  def to_dict(self) -> Dict[str, Any]:
-    '''Convert to dictionary.'''
+  def to_dict(self) -> dict[str, Any]:
+    """Convert to dictionary."""
     return asdict(self)
 
   def to_json(self) -> str:
-    '''Serialize to JSON string.'''
+    """Serialize to JSON string."""
     return json.dumps(self.to_dict(), indent=2)
 
   @classmethod
-  def from_dict(cls, data: Dict[str, Any]) -> 'ScenarioConfig':
-    '''Create from dictionary.'''
+  def from_dict(cls, data: dict[str, Any]) -> 'ScenarioConfig':
+    """Create from dictionary."""
     return cls(**data)
 
   @classmethod
   def from_json(cls, json_str: str) -> 'ScenarioConfig':
-    '''Create from JSON string.'''
+    """Create from JSON string."""
     return cls.from_dict(json.loads(json_str))

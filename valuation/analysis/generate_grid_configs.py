@@ -1,4 +1,4 @@
-'''
+"""
 Generate grid search scenario configs.
 
 This script creates JSON config files for all combinations of parameters,
@@ -24,14 +24,14 @@ Usage:
     --discount fixed_0p08 fixed_0p10 fixed_0p12 \
     --n-years 10 15 \
     --output-dir scenarios/grid_search_multi
-'''
+"""
 
 import argparse
+from itertools import product
 import json
 import logging
-from itertools import product
 from pathlib import Path
-from typing import Dict, List
+from typing import Any
 
 from valuation.scenarios.config import ScenarioConfig
 
@@ -39,15 +39,15 @@ logger = logging.getLogger(__name__)
 
 
 def generate_grid_configs(
-    capex_options: List[str],
-    discount_options: List[str],
-    growth_options: List[str],
-    fade_options: List[str],
-    shares_options: List[str],
-    terminal_options: List[str],
-    n_years_options: List[int],
-) -> List[Dict]:
-  '''
+    capex_options: list[str],
+    discount_options: list[str],
+    growth_options: list[str],
+    fade_options: list[str],
+    shares_options: list[str],
+    terminal_options: list[str],
+    n_years_options: list[int],
+) -> list[dict[str, Any]]:
+  """
   Generate all combinations of policy parameters.
 
   Args:
@@ -61,7 +61,7 @@ def generate_grid_configs(
 
   Returns:
     List of config dictionaries
-  '''
+  """
   configs = []
 
   combinations = product(
@@ -94,14 +94,14 @@ def generate_grid_configs(
   return configs
 
 
-def save_configs(configs: List[Dict], output_dir: Path):
-  '''
+def save_configs(configs: list[dict[str, Any]], output_dir: Path):
+  """
   Save configs to JSON files.
 
   Args:
     configs: List of config dictionaries
     output_dir: Output directory
-  '''
+  """
   output_dir.mkdir(parents=True, exist_ok=True)
 
   for config in configs:
@@ -116,7 +116,7 @@ def save_configs(configs: List[Dict], output_dir: Path):
 
 
 def main():
-  '''CLI entrypoint for grid config generation.'''
+  """CLI entrypoint for grid config generation."""
   parser = argparse.ArgumentParser(
       description='Generate grid search scenario configs')
 

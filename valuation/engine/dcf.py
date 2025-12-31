@@ -1,4 +1,4 @@
-'''
+"""
 Pure DCF math engine.
 
 This module contains pure functions for DCF calculations. No pandas, no I/O,
@@ -8,27 +8,27 @@ Key functions:
   compute_intrinsic_value: Main entry point, computes IV per share
   compute_pv_explicit: PV of explicit forecast period
   compute_terminal_value: Gordon growth terminal value
-'''
+"""
 
+from collections.abc import Sequence
 from math import isfinite
-from typing import List, Tuple
 
 
 def compute_pv_explicit(
     oe0: float,
     sh0: float,
     buyback_rate: float,
-    growth_path: List[float],
+    growth_path: Sequence[float],
     discount_rate: float,
-) -> Tuple[float, float, float]:
-  '''
+) -> tuple[float, float, float]:
+  """
   Compute present value of explicit forecast period.
 
   Args:
     oe0: Initial owner earnings (absolute, not per share)
     sh0: Initial shares outstanding
     buyback_rate: Annual share reduction rate (b)
-    growth_path: List of yearly growth rates [g1, g2, ..., gN]
+    growth_path: Sequence of yearly growth rates [g1, g2, ..., gN]
     discount_rate: Required return (r)
 
   Returns:
@@ -36,7 +36,7 @@ def compute_pv_explicit(
     - pv_total: Total PV of explicit period OE per share
     - final_oeps: OE per share in final year
     - final_shares: Shares outstanding in final year
-  '''
+  """
   pv = 0.0
   oe = oe0
   shares = sh0
@@ -54,14 +54,13 @@ def compute_pv_explicit(
   final_oeps = oe / shares if shares > 0 else 0.0
   return pv, final_oeps, shares
 
-
 def compute_terminal_value(
     final_oeps: float,
     g_terminal: float,
     discount_rate: float,
     final_year: int,
 ) -> float:
-  '''
+  """
   Compute discounted terminal value using Gordon Growth Model.
 
   Args:
@@ -75,7 +74,7 @@ def compute_terminal_value(
 
   Raises:
     Returns nan if discount_rate <= g_terminal (model undefined)
-  '''
+  """
   if discount_rate <= g_terminal:
     return float('nan')
 
@@ -83,16 +82,15 @@ def compute_terminal_value(
   discounted_tv = tv / ((1.0 + discount_rate)**final_year)
   return discounted_tv
 
-
 def compute_intrinsic_value(
     oe0: float,
     sh0: float,
     buyback_rate: float,
-    growth_path: List[float],
+    growth_path: Sequence[float],
     g_terminal: float,
     discount_rate: float,
-) -> Tuple[float, float, float]:
-  '''
+) -> tuple[float, float, float]:
+  """
   Compute intrinsic value per share using two-stage DCF model.
 
   Stage 1: Explicit forecast period with fading growth and share buybacks
@@ -102,7 +100,7 @@ def compute_intrinsic_value(
     oe0: Initial owner earnings (CFO - CAPEX)
     sh0: Current shares outstanding
     buyback_rate: Annual share reduction rate (b)
-    growth_path: List of yearly growth rates [g1, g2, ..., gN]
+    growth_path: Sequence of yearly growth rates [g1, g2, ..., gN]
     g_terminal: Perpetual terminal growth rate
     discount_rate: Required return (r)
 
@@ -111,7 +109,7 @@ def compute_intrinsic_value(
     - iv_per_share: Total intrinsic value per share
     - pv_explicit: PV contribution from explicit period
     - tv_component: PV contribution from terminal value
-  '''
+  """
   n_years = len(growth_path)
 
   if not isfinite(oe0) or not isfinite(sh0) or not isfinite(buyback_rate):

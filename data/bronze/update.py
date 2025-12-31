@@ -1,4 +1,4 @@
-'''
+"""
 bronze_pipeline.py
 
 Bronze (raw) ingestion pipeline for:
@@ -18,17 +18,18 @@ References:
 - SEC submissions endpoint:
   https://data.sec.gov/submissions/CIK##########.json
 - SEC access policy: max 10 req/s + declare User-Agent
-'''
+"""
 
 from __future__ import annotations
 
 import argparse
-import json
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
+from datetime import timezone
+import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+import time
+from typing import Any, Iterable, Optional
 
 import requests
 
@@ -77,7 +78,7 @@ def _atomic_write_bytes(path: Path, content: bytes) -> None:
   tmp.replace(path)
 
 
-def _write_meta(path: Path, meta: Dict[str, Any]) -> None:
+def _write_meta(path: Path, meta: dict[str, Any]) -> None:
   meta_path = path.with_suffix(path.suffix + '.meta.json')
   _atomic_write_bytes(
       meta_path,
@@ -85,7 +86,7 @@ def _write_meta(path: Path, meta: Dict[str, Any]) -> None:
 
 
 class RateLimiter:
-  '''Simple min-interval rate limiter.'''
+  """Simple min-interval rate limiter."""
 
   def __init__(self, min_interval_sec: float) -> None:
     self._min_interval = float(min_interval_sec)
@@ -103,12 +104,12 @@ def _fetch_bytes(
     session: requests.Session,
     url: str,
     *,
-    headers: Dict[str, str],
+    headers: dict[str, str],
     timeout_sec: int = 30,
     retries: int = 3,
     backoff_sec: float = 1.0,
     limiter: Optional[RateLimiter] = None,
-) -> Tuple[bytes, FetchResult]:
+) -> tuple[bytes, FetchResult]:
   last_err: Optional[Exception] = None
   for attempt in range(retries):
     try:
@@ -138,14 +139,14 @@ def _fetch_bytes(
   raise last_err
 
 
-def _load_ticker_map(company_tickers_json: bytes) -> Dict[str, str]:
-  '''
+def _load_ticker_map(company_tickers_json: bytes) -> dict[str, str]:
+  """
   SEC company_tickers.json format:
     {'0':{'cik_str':1652044,'ticker':'GOOGL','title':'Alphabet Inc.'}, ...}
   Returns: { 'GOOGL': '0001652044', ... }
-  '''
+  """
   raw = json.loads(company_tickers_json.decode('utf-8'))
-  out: Dict[str, str] = {}
+  out: dict[str, str] = {}
   for _, v in raw.items():
     ticker = str(v.get('ticker', '')).upper().strip()
     cik = str(v.get('cik_str', '')).strip()
@@ -169,9 +170,9 @@ def _save_if_needed(
     refresh_days: int,
     force: bool,
 ) -> bool:
-  '''
+  """
   Returns True if a download/write happened, False if skipped.
-  '''
+  """
   if not force and _is_fresh(path, refresh_days):
     return False
 
@@ -353,7 +354,7 @@ def _build_argparser() -> argparse.ArgumentParser:
 
 
 def _load_tickers_from_file(path: Path) -> list[str]:
-  '''Load tickers from file (one per line, # for comments).'''
+  """Load tickers from file (one per line, # for comments)."""
   if not path.exists():
     raise FileNotFoundError(f'Tickers file not found: {path}')
 

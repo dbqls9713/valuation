@@ -1,21 +1,21 @@
-'''
+"""
 Domain types for the valuation framework.
 
 These dataclasses provide typed interfaces between components, ensuring
 policies don't directly depend on raw DataFrame columns.
-'''
+"""
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from dataclasses import dataclass
+from dataclasses import field
+from typing import Any, Generic, Optional, TypeVar
 
 import pandas as pd
 
-T = TypeVar('T')
-
+_T = TypeVar('_T')
 
 @dataclass
-class PolicyOutput(Generic[T]):
-  '''
+class PolicyOutput(Generic[_T]):
+  """
   Standard output from any policy.
 
   Every policy returns both a computed value and diagnostic information
@@ -24,14 +24,13 @@ class PolicyOutput(Generic[T]):
   Attributes:
     value: The computed value (type depends on policy)
     diag: Dictionary of diagnostic information
-  '''
-  value: T
-  diag: Dict[str, Any] = field(default_factory=dict)
-
+  """
+  value: _T
+  diag: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class FundamentalsSlice:
-  '''
+  """
   Point-in-time slice of fundamental data for a single company.
 
   This is the primary input to policies. All data should reflect only
@@ -48,7 +47,7 @@ class FundamentalsSlice:
     latest_capex_ttm: Most recent TTM CAPEX value
     latest_shares: Most recent shares count
     latest_filed: Filing date of the most recent data
-  '''
+  """
   ticker: str
   as_of_end: pd.Timestamp
   filed_cutoff: pd.Timestamp
@@ -63,7 +62,7 @@ class FundamentalsSlice:
   @classmethod
   def from_panel(cls, panel: pd.DataFrame, ticker: str,
                  as_of_date: pd.Timestamp) -> 'FundamentalsSlice':
-    '''
+    """
     Construct FundamentalsSlice from Gold panel with PIT filtering.
 
     Args:
@@ -73,7 +72,7 @@ class FundamentalsSlice:
 
     Returns:
       FundamentalsSlice with PIT-filtered data
-    '''
+    """
     ticker_data = panel[panel['ticker'] == ticker].copy()
     if ticker_data.empty:
       raise ValueError(f'No data for ticker {ticker}')
@@ -110,23 +109,21 @@ class FundamentalsSlice:
         latest_filed=latest['filed'],
     )
 
-
 @dataclass
 class MarketSlice:
-  '''
+  """
   Market price data for comparison.
 
   Attributes:
     price: Market price per share
     price_date: Date of the price observation
-  '''
+  """
   price: float
   price_date: pd.Timestamp
 
-
 @dataclass
 class PreparedInputs:
-  '''
+  """
   Fully prepared inputs for the DCF engine.
 
   All policy outputs are aggregated here before passing to the pure math engine.
@@ -140,27 +137,26 @@ class PreparedInputs:
     growth_path: Yearly growth rates [g1, g2, ..., gN] from fade policy
     n_years: Number of explicit forecast years
     discount_rate: Required return / discount rate
-  '''
+  """
   oe0: float
   sh0: float
   buyback_rate: float
   g0: float
   g_terminal: float
-  growth_path: List[float]
+  growth_path: list[float]
   n_years: int
   discount_rate: float
 
   @property
   def g_end(self) -> float:
-    '''Growth rate at end of explicit period (last in growth_path).'''
+    """Growth rate at end of explicit period (last in growth_path)."""
     if not self.growth_path:
       return self.g_terminal
     return self.growth_path[-1]
 
-
 @dataclass
 class ValuationResult:
-  '''
+  """
   Complete valuation result with diagnostics.
 
   Attributes:
@@ -172,7 +168,7 @@ class ValuationResult:
     margin_of_safety: (IV - Price) / IV (if market price provided)
     inputs: The PreparedInputs used for calculation
     diag: Merged diagnostics from all policies
-  '''
+  """
   iv_per_share: float
   pv_explicit: float
   tv_component: float
@@ -180,10 +176,10 @@ class ValuationResult:
   price_to_iv: Optional[float] = None
   margin_of_safety: Optional[float] = None
   inputs: Optional[PreparedInputs] = None
-  diag: Dict[str, Any] = field(default_factory=dict)
+  diag: dict[str, Any] = field(default_factory=dict)
 
-  def to_dict(self) -> Dict[str, Any]:
-    '''Convert to dictionary for DataFrame creation.'''
+  def to_dict(self) -> dict[str, Any]:
+    """Convert to dictionary for DataFrame creation."""
     result = {
         'iv_per_share': self.iv_per_share,
         'pv_explicit': self.pv_explicit,
@@ -204,17 +200,16 @@ class ValuationResult:
     result.update(self.diag)
     return result
 
-
 @dataclass
 class ExclusionReason:
-  '''
+  """
   Reason why a valuation was excluded/skipped.
 
   Attributes:
     reason: Human-readable explanation
     code: Machine-readable code (e.g., 'insufficient_data', 'low_growth')
     details: Additional context
-  '''
+  """
   reason: str
   code: str
-  details: Dict[str, Any] = field(default_factory=dict)
+  details: dict[str, Any] = field(default_factory=dict)

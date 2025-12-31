@@ -1,20 +1,20 @@
-'''
+"""
 Shared transformation functions for Gold layer panels.
 
 These functions handle common operations like pivoting metrics
 and joining with price data using point-in-time logic.
-'''
+"""
 
-from typing import List, Optional
+from typing import Optional
 
 import pandas as pd
 
 
 def pivot_metrics_wide(
     metrics_q: pd.DataFrame,
-    metrics: Optional[List[str]] = None,
+    metrics: Optional[list[str]] = None,
 ) -> pd.DataFrame:
-  '''
+  """
   Pivot metrics_quarterly from long to wide format.
 
   Args:
@@ -27,7 +27,7 @@ def pivot_metrics_wide(
   Note:
     Filed date is consolidated using max() across all metrics for each
     (cik10, end) combination.
-  '''
+  """
   if metrics:
     metrics_q = metrics_q[metrics_q['metric'].isin(metrics)].copy()
 
@@ -71,13 +71,12 @@ def pivot_metrics_wide(
   result = result.drop(columns=filed_cols)
   return result  # type: ignore[no-any-return]
 
-
 def join_prices_pit(
     metrics_wide: pd.DataFrame,
     prices: pd.DataFrame,
     ticker_col: str = 'ticker',
 ) -> pd.DataFrame:
-  '''
+  """
   Join metrics with prices using point-in-time logic.
 
   For each metric row, finds the first available price after the filed date.
@@ -90,7 +89,7 @@ def join_prices_pit(
 
   Returns:
     Panel with price and date columns added
-  '''
+  """
   metrics_wide = metrics_wide.copy()
   metrics_wide['end'] = pd.to_datetime(metrics_wide['end'])
   metrics_wide['filed'] = pd.to_datetime(metrics_wide['filed'])
@@ -125,13 +124,12 @@ def join_prices_pit(
 
   return pd.concat(panel_parts, ignore_index=True)
 
-
 def calculate_market_cap(
     panel: pd.DataFrame,
     shares_col: str = 'shares_q',
     price_col: str = 'price',
 ) -> pd.DataFrame:
-  '''
+  """
   Calculate market capitalization.
 
   Args:
@@ -141,7 +139,7 @@ def calculate_market_cap(
 
   Returns:
     Panel with market_cap column added
-  '''
+  """
   panel = panel.copy()
 
   if shares_col not in panel.columns or price_col not in panel.columns:

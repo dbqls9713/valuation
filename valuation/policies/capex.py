@@ -1,29 +1,31 @@
-'''
+"""
 CAPEX estimation policies.
 
 These policies determine how CAPEX is calculated for Owner Earnings.
 Different methods handle volatile CAPEX differently.
-'''
+"""
 
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 
-from valuation.domain.types import FundamentalsSlice, PolicyOutput
+from valuation.domain.types import FundamentalsSlice
+from valuation.domain.types import PolicyOutput
 
 
 class CapexPolicy(ABC):
-  '''
+  """
   Base class for CAPEX estimation policies.
 
   Subclasses implement compute() to return a CAPEX value for OE calculation.
-  '''
+  """
 
   @abstractmethod
   def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
-    '''
+    """
     Compute CAPEX value for Owner Earnings calculation.
 
     Args:
@@ -31,47 +33,45 @@ class CapexPolicy(ABC):
 
     Returns:
       PolicyOutput with CAPEX value and diagnostics
-    '''
-
+    """
 
 class RawTTMCapex(CapexPolicy):
-  '''
+  """
   Use raw TTM CAPEX without adjustment.
 
   This is the simplest method but can be volatile if CAPEX varies
   significantly year-to-year.
-  '''
+  """
 
   def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
-    '''Return latest TTM CAPEX as-is.'''
+    """Return latest TTM CAPEX as-is."""
     return PolicyOutput(value=abs(data.latest_capex_ttm),
                         diag={
                             'capex_method': 'raw_ttm',
                             'capex_raw_ttm': data.latest_capex_ttm,
                         })
 
-
 class WeightedAverageCapex(CapexPolicy):
-  '''
+  """
   3-year weighted average CAPEX with linear weights (1:2:3).
 
   Most recent year gets highest weight, smoothing out CAPEX volatility
   while still reflecting recent trends.
-  '''
+  """
 
   def __init__(self, years: int = 3, weights: Optional[list] = None):
-    '''
+    """
     Initialize weighted average policy.
 
     Args:
       years: Number of years to average (default: 3)
       weights: Custom weights (default: [1, 2, 3] for 3 years)
-    '''
+    """
     self.years = years
     self.weights = weights
 
   def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
-    '''Compute weighted average of yearly CAPEX values.'''
+    """Compute weighted average of yearly CAPEX values."""
     capex_series = data.capex_ttm_history.dropna()
     if capex_series.empty:
       return PolicyOutput(value=float('nan'),
@@ -122,14 +122,13 @@ class WeightedAverageCapex(CapexPolicy):
                             'capex_weighted': weighted_capex,
                         })
 
-
 class IntensityClippedCapex(CapexPolicy):
-  '''
+  """
   CAPEX intensity clipping based on historical CAPEX/CFO ratio.
 
   If current CAPEX/CFO ratio exceeds historical percentile, the excess
   is reduced by a factor (default: halved).
-  '''
+  """
 
   def __init__(
       self,
@@ -137,20 +136,20 @@ class IntensityClippedCapex(CapexPolicy):
       reduction_factor: float = 0.5,
       lookback_quarters: int = 20,
   ):
-    '''
+    """
     Initialize intensity clipping policy.
 
     Args:
       percentile: Historical percentile threshold (default: 90th)
       reduction_factor: How much to reduce excess (default: 0.5 = half)
       lookback_quarters: Quarters to consider for percentile (default: 20)
-    '''
+    """
     self.percentile = percentile
     self.reduction_factor = reduction_factor
     self.lookback_quarters = lookback_quarters
 
   def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
-    '''Compute CAPEX with intensity clipping.'''
+    """Compute CAPEX with intensity clipping."""
     capex_series = data.capex_ttm_history.dropna()
     cfo_series = data.cfo_ttm_history.dropna()
 

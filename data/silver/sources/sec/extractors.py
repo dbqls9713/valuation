@@ -3,7 +3,7 @@ SEC data extractors.
 """
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -71,12 +71,12 @@ class SECCompanyFactsExtractor:
 
   def _pick_all_tags(
       self,
-      companyfacts: Dict[str, Any],
+      companyfacts: dict[str, Any],
       *,
       namespace: str,
-      tags: List[str],
+      tags: list[str],
       unit: str,
-  ) -> List[Tuple[str, List[Dict[str, Any]]]]:
+  ) -> list[tuple[str, list[dict[str, Any]]]]:
     """Return list of (tag, items) for all matching tags that exist."""
     facts = companyfacts.get('facts', {})
     ns_obj = facts.get(namespace, {})
@@ -91,14 +91,14 @@ class SECCompanyFactsExtractor:
 
   def _companyfacts_to_minimal_facts_long(
       self,
-      companyfacts: Dict[str, Any],
+      companyfacts: dict[str, Any],
       *,
       cik10: str,
-      metric_specs: Dict[str, Dict[str, Any]],
-  ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+      metric_specs: dict[str, dict[str, Any]],
+  ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Build minimal facts_long for a single company."""
-    rows: List[Dict[str, Any]] = []
-    chosen: Dict[str, Any] = {'cik10': cik10, 'chosen_tags': {}}
+    rows: list[dict[str, Any]] = []
+    chosen: dict[str, Any] = {'cik10': cik10, 'chosen_tags': {}}
 
     for metric, spec in metric_specs.items():
       namespace = spec['namespace']
