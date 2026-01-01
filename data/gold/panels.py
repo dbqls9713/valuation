@@ -1,5 +1,5 @@
 """
-Valuation and backtest panel builders.
+Gold layer panel builders.
 
 Builds model-ready panels for DCF analysis:
 - valuation_panel: Latest version for current valuation
@@ -16,9 +16,9 @@ import pandas as pd
 from data.gold.config.schemas import BACKTEST_PANEL_SCHEMA
 from data.gold.config.schemas import PanelSchema
 from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
-from data.gold.shared.transforms import calculate_market_cap
-from data.gold.shared.transforms import join_prices_pit
-from data.gold.shared.transforms import pivot_metrics_wide
+from data.gold.transforms import calculate_market_cap
+from data.gold.transforms import join_prices_pit
+from data.gold.transforms import pivot_metrics_wide
 from data.shared.io import ParquetWriter
 
 
