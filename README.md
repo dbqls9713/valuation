@@ -132,8 +132,8 @@ Irving Fisher (1930) and John Burr Williams (1938).
 
 ```text
 Bronze (Raw)         Silver (Normalized)      Gold (Analytical)
-├─ SEC filings    →  ├─ metrics_quarterly  →  └─ valuation_panel
-└─ Stock prices      └─ companies
+├─ SEC filings    →  ├─ metrics_quarterly  →  ├─ valuation_panel  (latest)
+└─ Stock prices      └─ companies             └─ backtest_panel   (all PIT)
 ```
 
 ### Valuation Framework

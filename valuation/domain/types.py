@@ -77,10 +77,17 @@ class FundamentalsSlice:
     if ticker_data.empty:
       raise ValueError(f'No data for ticker {ticker}')
 
+    # PIT filtering: only data filed on or before as_of_date
     pit_data = ticker_data[ticker_data['filed'] <= as_of_date].copy()
     if pit_data.empty:
       raise ValueError(f'No data for {ticker} as of {as_of_date.date()}')
 
+    # For each quarter end, keep only the latest filed version
+    # (This handles restatements where multiple filings exist for same quarter)
+    pit_data = pit_data.sort_values(['end', 'filed'])
+    pit_data = pit_data.groupby('end', as_index=False).tail(1)
+
+    # Sort by end date to get latest quarter
     pit_data = pit_data.sort_values('end')
     latest = pit_data.iloc[-1]
 

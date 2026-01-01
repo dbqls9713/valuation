@@ -20,68 +20,45 @@ class SECFactsTransformer:
     result = self.fiscal_year_calc.calculate(facts, companies)
     return result  # type: ignore[no-any-return]
 
-  def deduplicate(self,
-                  df: pd.DataFrame,
-                  keep_all_versions: bool = False) -> pd.DataFrame:
+  def deduplicate(self, df: pd.DataFrame) -> pd.DataFrame:
     """
-    Keep only the latest filed value for each period, or all versions.
+    Deduplicate facts by (fiscal_year, fiscal_quarter, filed).
 
-    Args:
-        df: Input DataFrame
-        keep_all_versions: If True, keep all filed versions for PIT analysis.
-                          If False, keep only the latest filed version.
+    Keeps all filed versions for PIT (Point-in-Time) analysis.
+    When multiple records exist for the same key, keeps the highest
+    priority tag (as defined in METRIC_SPECS).
 
-    Uses fiscal_year for grouping when available.
-    Filters out comparative statements (fy != fiscal_year) to avoid mixing
-    different periods in downstream processing.
+    Requires 'fiscal_quarter' column to be present.
     """
     if df.empty:
       return df
 
-    if 'fiscal_year' not in df.columns:
-      group_cols = ['cik10', 'metric', 'end', 'fy', 'fp']
-      out = df.sort_values(group_cols + ['filed'])
-      out = out.groupby(group_cols, as_index=False).tail(1)
-      return out.reset_index(drop=True)
+    if 'fiscal_quarter' not in df.columns:
+      raise ValueError('fiscal_quarter column required for deduplicate')
 
-    # Filter out comparative statements: keep only fy == fiscal_year
-    df = df[df['fy'] == df['fiscal_year']].copy()
+    # Filter out invalid data (fy=0 or empty fp)
+    valid = df[(df['fy'] > 0) & (df['fp'] != '')].copy()
 
-    if keep_all_versions:
-      # For PIT: keep all unique (end, fp, filed) combinations
-      # Remove exact duplicates but preserve different filing dates
-      return df.drop_duplicates(
-          subset=['cik10', 'metric', 'end', 'fp',
-                  'filed'], keep='last').reset_index(drop=True)
+    # When same (fiscal_year, fiscal_quarter, filed) has multiple records,
+    # keep highest priority tag and latest end date
+    tag_priority: dict[str, int] = {}
+    for spec in METRIC_SPECS.values():
+      tags: list[str] = spec['tags']  # type: ignore[assignment]
+      for idx, tag in enumerate(tags):
+        tag_priority[tag] = idx
 
-    # Original logic: keep only latest filed version
-    out_parts: list[pd.DataFrame] = []
+    valid['_tag_priority'] = valid['tag'].map(
+        lambda t: tag_priority.get(t, 999))
+    # Sort by tag priority (asc), then end date (desc)
+    valid = valid.sort_values(['_tag_priority', 'end'], ascending=[True, False])
 
-    for _, g in df.groupby(['cik10', 'metric', 'fiscal_year'], dropna=True):
-      # Since we filtered fy == fiscal_year, all records belong to this
-      # fiscal_year
-      for _, sub in g.groupby(['end', 'fp']):
-        quarterly_fps = {'Q1', 'Q2', 'Q3', 'Q4'}
-        has_quarterly = any(r['fp'] in quarterly_fps for _, r in sub.iterrows())
-        has_fy = any(r['fp'] == 'FY' for _, r in sub.iterrows())
+    # Deduplicate by (fiscal_year, fiscal_quarter, filed), keep best tag
+    dedup_cols = ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed']
+    valid = valid.drop_duplicates(subset=dedup_cols, keep='first')
 
-        if has_quarterly and has_fy:
-          sub = sub[sub['fp'].isin(quarterly_fps)]
+    valid = valid.drop(columns=['_tag_priority'])
+    return valid.reset_index(drop=True)
 
-        if len(sub) > 1:
-          # Multiple filings for same period: keep latest
-          sub = sub.sort_values('filed', ascending=False).head(1)
-
-        out_parts.append(sub)
-
-    if not out_parts:
-      return pd.DataFrame(columns=df.columns)
-
-    non_empty = [p for p in out_parts if not p.empty]
-    if not non_empty:
-      return pd.DataFrame(columns=df.columns)
-
-    return pd.concat(non_empty, ignore_index=True).reset_index(drop=True)
 
 class SECMetricsBuilder:
   """Build quarterly metrics from facts."""
@@ -103,21 +80,16 @@ class SECMetricsBuilder:
       if bool(spec.get('abs', False)):
         df['val'] = df['val'].abs()
 
-      # Normalize to actual count if specified (for SHARES)
       if bool(spec.get('normalize_to_actual_count', False)):
         df['val'] = self._normalize_shares_to_actual_count(df['val'])
 
       parts = []
       for cik10, g in df.groupby('cik10'):
         if bool(spec.get('is_ytd', False)):
-          qg = self._ytd_to_quarter(g,
-                                    value_col='val',
-                                    out_col='q_val',
-                                    group_by_fiscal_year=True)
+          qg = self._ytd_to_quarter_pit(g, value_col='val', out_col='q_val')
           if bool(spec.get('abs', False)):
             qg['q_val'] = qg['q_val'].abs()
         else:
-          # Non-YTD metrics: preserve the actual tag for each row
           qg = g.rename(columns={'val': 'q_val'})[[
               'end', 'filed', 'fy', 'fp', 'fiscal_year', 'q_val', 'tag'
           ]].copy()
@@ -129,18 +101,12 @@ class SECMetricsBuilder:
       non_empty_parts = [p for p in parts if not p.empty]
       if not non_empty_parts:
         continue
-      q_all = pd.concat(non_empty_parts,
-                        ignore_index=True).sort_values(['cik10', 'end'])
+      q_all = pd.concat(non_empty_parts, ignore_index=True)
 
-      # Calculate TTM only for flow metrics (is_ytd=True)
+      # Calculate TTM for flow metrics using PIT logic
       if bool(spec.get('is_ytd', False)):
-        q_all['ttm_val'] = (q_all.sort_values([
-            'cik10', 'metric', 'end'
-        ]).groupby(['cik10', 'metric'
-                   ])['q_val'].rolling(4).sum().reset_index(level=[0, 1],
-                                                            drop=True))
+        q_all = self._calculate_ttm_pit(q_all)
       else:
-        # For point-in-time metrics (like SHARES), ttm_val is not meaningful
         q_all['ttm_val'] = pd.Series([pd.NA] * len(q_all), dtype='Float64')
 
       out_parts.append(q_all[[
@@ -199,89 +165,92 @@ class SECMetricsBuilder:
 
     return series.apply(normalize_value)  # type: ignore[no-any-return]
 
-  def _ytd_to_quarter(self,
-                      df_ytd: pd.DataFrame,
-                      *,
-                      value_col: str = 'val',
-                      out_col: str = 'q_val',
-                      group_by_fiscal_year: bool = True) -> pd.DataFrame:
-    """Convert YTD values to discrete quarterly values."""
+  def _ytd_to_quarter_pit(self,
+                          df_ytd: pd.DataFrame,
+                          value_col: str = 'val',
+                          out_col: str = 'q_val') -> pd.DataFrame:
+    """
+    Convert YTD values to quarterly values using PIT (Point-in-Time) logic.
+
+    For each row, find the previous quarter's YTD value that was filed before
+    this row's filed date, then subtract to get the quarterly value.
+    This ensures each filed version uses only data available at that time.
+    """
     if df_ytd.empty:
       return pd.DataFrame()
 
-    group_col = 'fiscal_year' if group_by_fiscal_year else 'fy'
-    if group_col not in df_ytd.columns:
-      return pd.DataFrame()
+    df = df_ytd.copy()
+    df = df.sort_values('filed')
 
-    df_ytd = df_ytd.sort_values(['end'])
+    prev_fp_map = {'Q2': 'Q1', 'Q3': 'Q2', 'FY': 'Q3'}
+
     out_rows = []
 
-    for group_val, g in df_ytd.groupby(group_col):
-      period_data = {}
-      for _, row in g.iterrows():
-        fp = str(row['fp'])
-        tag = row.get('tag')
-        if not tag:
-          raise ValueError(
-              f"Missing tag for {row.get('cik10')} {row.get('metric')} "
-              f"{row.get('end')} {fp}")
-        period_data[fp] = {
-            'end': row['end'],
-            'filed': row['filed'],
-            'fy': row.get('fy'),
-            'tag': tag,
-            value_col: float(row[value_col])
-        }
+    for _, row in df.iterrows():
+      fp = str(row['fp'])
+      fiscal_year = row['fiscal_year']
+      filed = row['filed']
+      ytd_val = float(row[value_col])
 
-      def _emit_row(fp_key, fp_out, q_value, current_period_data,
-                    current_group_val):
-        tag = current_period_data[fp_key].get('tag')
-        if not tag:
-          raise ValueError(f"Missing tag for period {fp_key}")
-        row_dict = {
-            'end': current_period_data[fp_key]['end'],
-            'filed': current_period_data[fp_key]['filed'],
-            'fp': fp_out,
-            'tag': tag,
-            out_col: float(q_value),
-        }
-        if 'fy' in current_period_data[fp_key]:
-          row_dict['fy'] = current_period_data[fp_key]['fy']
-        if group_by_fiscal_year:
-          row_dict['fiscal_year'] = current_group_val
+      if fp == 'Q1':
+        q_val = ytd_val
+      elif fp in prev_fp_map:
+        prev_q = prev_fp_map[fp]
+        candidates = df[(df['fiscal_year'] == fiscal_year) &
+                        (df['fp'] == prev_q) & (df['filed'] < filed)]
+
+        if not candidates.empty:
+          prev_row = candidates.sort_values('filed').iloc[-1]
+          prev_ytd_val = float(prev_row[value_col])
+          q_val = ytd_val - prev_ytd_val
         else:
-          row_dict['fy'] = current_group_val
-        out_rows.append(row_dict)
+          q_val = ytd_val
+      else:
+        continue
 
-      if 'Q1' in period_data:
-        _emit_row('Q1', 'Q1', period_data['Q1'][value_col], period_data,
-                  group_val)
-
-      if 'Q2' in period_data:
-        if 'Q1' in period_data:
-          q2_val = period_data['Q2'][value_col] - period_data['Q1'][value_col]
-        else:
-          q2_val = period_data['Q2'][value_col]
-        _emit_row('Q2', 'Q2', q2_val, period_data, group_val)
-
-      if 'Q3' in period_data:
-        if 'Q2' in period_data:
-          q3_val = period_data['Q3'][value_col] - period_data['Q2'][value_col]
-        elif 'Q1' in period_data:
-          q3_val = period_data['Q3'][value_col] - period_data['Q1'][value_col]
-        else:
-          q3_val = period_data['Q3'][value_col]
-        _emit_row('Q3', 'Q3', q3_val, period_data, group_val)
-
-      if 'FY' in period_data:
-        if 'Q3' in period_data:
-          q4_val = period_data['FY'][value_col] - period_data['Q3'][value_col]
-        elif 'Q2' in period_data:
-          q4_val = period_data['FY'][value_col] - period_data['Q2'][value_col]
-        elif 'Q1' in period_data:
-          q4_val = period_data['FY'][value_col] - period_data['Q1'][value_col]
-        else:
-          q4_val = period_data['FY'][value_col]
-        _emit_row('FY', 'Q4', q4_val, period_data, group_val)
+      out_rows.append({
+          'end': row['end'],
+          'filed': row['filed'],
+          'fy': row['fy'],
+          'fp': 'Q4' if fp == 'FY' else fp,
+          'fiscal_year': fiscal_year,
+          out_col: q_val,
+          'tag': row['tag'],
+      })
 
     return pd.DataFrame(out_rows)
+
+  def _calculate_ttm_pit(self, q_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate TTM using PIT logic.
+
+    For each row, sum the 4 most recent quarterly values that were
+    filed before this row's filed date.
+    """
+    if q_df.empty:
+      return q_df
+
+    df = q_df.copy()
+    df = df.sort_values(['cik10', 'filed', 'end'])
+
+    ttm_values = []
+
+    for _, row in df.iterrows():
+      cik10 = row['cik10']
+      filed = row['filed']
+
+      candidates = df[(df['cik10'] == cik10) & (df['filed'] <= filed)]
+      candidates = candidates.drop_duplicates(subset=['end'],
+                                              keep='last').sort_values('end')
+
+      recent_4 = candidates.tail(4)
+
+      if len(recent_4) == 4:
+        ttm = recent_4['q_val'].sum()
+      else:
+        ttm = pd.NA
+
+      ttm_values.append(ttm)
+
+    df['ttm_val'] = pd.array(ttm_values, dtype='Float64')
+    return df

@@ -115,7 +115,7 @@ def main():
                       help='Output CSV path')
   parser.add_argument('--gold-path',
                       type=Path,
-                      default=Path('data/gold/out/valuation_panel.parquet'))
+                      default=Path('data/gold/out/backtest_panel.parquet'))
   parser.add_argument('--silver-dir',
                       type=Path,
                       default=Path('data/silver/out'))

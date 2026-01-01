@@ -58,27 +58,72 @@ class SECPipeline(Pipeline):
     if facts.empty:
       self.datasets['facts_long'] = pd.DataFrame()
       self.datasets['metrics_quarterly'] = pd.DataFrame()
-      self.datasets['metrics_quarterly_history'] = pd.DataFrame()
       return
 
-    facts = self.transformer.add_fiscal_year(facts, companies)
-    facts = self.transformer.deduplicate(facts)
+    # Infer FYE from data for companies without FYE info
+    companies = self._infer_fye(facts, companies)
+    self.datasets['companies'] = companies
 
-    self.datasets['facts_long'] = facts
+    # Add fiscal year to all facts
+    facts_with_fy = self.transformer.add_fiscal_year(facts, companies)
 
-    # Build metrics
-    metrics_q_all = self.metrics_builder.build(facts)
+    # Add fiscal_quarter BEFORE deduplicate (needed for dedup key)
+    facts_with_fq = self._add_fiscal_quarter(facts_with_fy, companies)
 
-    # Generate both versions
-    # 1. Latest version (for current valuation)
-    metrics_q_latest = self.transformer.deduplicate(metrics_q_all,
-                                                    keep_all_versions=False)
-    self.datasets['metrics_quarterly'] = metrics_q_latest
+    # Deduplicate by (fiscal_year, fiscal_quarter, filed) for PIT support
+    facts_all_versions = self.transformer.deduplicate(facts_with_fq)
+    self.datasets['facts_long'] = facts_all_versions
 
-    # 2. History version (for PIT backtest)
-    metrics_q_history = self.transformer.deduplicate(metrics_q_all,
-                                                     keep_all_versions=True)
-    self.datasets['metrics_quarterly_history'] = metrics_q_history
+    # Build metrics from all versions
+    metrics_q = self.metrics_builder.build(facts_all_versions)
+
+    # Add fiscal_quarter (metrics_q has end column from facts)
+    metrics_q = self._add_fiscal_quarter(metrics_q, companies)
+
+    # Drop original fp column (metrics_builder outputs fp as Q1/Q2/Q3/Q4)
+    if 'fp' in metrics_q.columns:
+      metrics_q = metrics_q.drop(columns=['fp'])
+    self.datasets['metrics_quarterly'] = metrics_q
+
+  def _infer_fye(self, facts: pd.DataFrame,
+                 companies: pd.DataFrame) -> pd.DataFrame:
+    """Infer FYE from FY data's end date pattern for companies without FYE."""
+    companies = companies.copy()
+
+    # Get FY data end dates
+    fy_data = facts[facts['fp'] == 'FY'].copy()
+    if fy_data.empty:
+      return companies
+
+    fy_data['end_mmdd'] = fy_data['end'].dt.strftime('%m%d')
+
+    # Infer FYE as the most frequent end date pattern per company
+    inferred_fye = (fy_data.groupby('cik10')['end_mmdd'].agg(
+        lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else None).to_dict())
+
+    # Update companies with inferred FYE where fye_mmdd is None
+    def fill_fye(row: pd.Series) -> str:
+      if pd.notna(row['fye_mmdd']) and row['fye_mmdd']:
+        return str(row['fye_mmdd'])
+      return str(inferred_fye.get(row['cik10']) or '1231')
+
+    companies['fye_mmdd'] = companies.apply(  # type: ignore[arg-type]
+        fill_fye, axis=1)
+    return companies
+
+  def _add_fiscal_quarter(self, df: pd.DataFrame,
+                          companies: pd.DataFrame) -> pd.DataFrame:
+    """Add fiscal_quarter based on end date and FYE with ±7 day tolerance."""
+    from data.silver.shared.transforms import \
+        FiscalQuarterCalculator  # pylint: disable=import-outside-toplevel
+
+    df = df.copy()
+    fye_series = companies.set_index('cik10')['fye_mmdd']
+    fye_map: dict[str, str] = {str(k): str(v) for k, v in fye_series.items()}
+
+    calculator = FiscalQuarterCalculator()
+    df['fiscal_quarter'] = calculator.calculate(df, fye_map)
+    return df
 
   def validate(self) -> None:
     """Run validation checks."""
@@ -95,14 +140,9 @@ class SECPipeline(Pipeline):
     self.out_dir.mkdir(parents=True, exist_ok=True)
 
     datasets_to_write = {
-        'companies':
-            self.datasets.get('companies'),
-        'facts_long':
-            self.datasets.get('facts_long'),
-        'metrics_quarterly':
-            self.datasets.get('metrics_quarterly'),
-        'metrics_quarterly_history':
-            self.datasets.get('metrics_quarterly_history'),
+        'companies': self.datasets.get('companies'),
+        'facts_long': self.datasets.get('facts_long'),
+        'metrics_quarterly': self.datasets.get('metrics_quarterly'),
     }
 
     cf_files = self._get_companyfact_files()

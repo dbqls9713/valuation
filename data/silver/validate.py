@@ -29,7 +29,6 @@ import pandas as pd
 
 from data.silver.config.metric_specs import METRIC_SPECS
 from data.silver.config.schemas import FACTS_LONG_SCHEMA
-from data.silver.config.schemas import METRICS_QUARTERLY_HISTORY_SCHEMA
 from data.silver.config.schemas import METRICS_QUARTERLY_SCHEMA
 from data.silver.config.schemas import PRICES_DAILY_SCHEMA
 
@@ -40,10 +39,12 @@ class CheckResult:
   ok: bool
   details: str
 
+
 def _require_columns(df: pd.DataFrame, cols: list[str], name: str) -> None:
   missing = [c for c in cols if c not in df.columns]
   if missing:
     raise ValueError(f'[{name}] missing columns: {missing}')
+
 
 def _check_schema(df: pd.DataFrame, schema, name: str) -> CheckResult:
   """
@@ -81,6 +82,7 @@ def _check_schema(df: pd.DataFrame, schema, name: str) -> CheckResult:
 
   return CheckResult(f'{name}_schema', True, 'All schema constraints satisfied')
 
+
 def _assert_unique(df: pd.DataFrame, key_cols: list[str],
                    name: str) -> CheckResult:
   dup = df.duplicated(key_cols, keep=False)
@@ -91,26 +93,29 @@ def _assert_unique(df: pd.DataFrame, key_cols: list[str],
     return CheckResult(name, False, msg)
   return CheckResult(name, True, f'Unique by {key_cols}')
 
+
 def _assert_filed_ge_end(df: pd.DataFrame, name: str) -> CheckResult:
   bad = df['filed'] < df['end']
   if bad.any():
     n = int(bad.sum())
-    cols = ['cik10', 'metric', 'end', 'filed', 'fp']
+    cols = ['cik10', 'metric', 'end', 'filed', 'fiscal_quarter']
+    cols = [c for c in cols if c in df.columns]
     sample = df.loc[bad, cols].head(5).to_dict(orient='records')
     return CheckResult(name, False,
                        f'{n} rows have filed < end. Sample: {sample}')
   return CheckResult(name, True, 'All rows satisfy filed >= end')
+
 
 def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
                         tol: float) -> CheckResult:
   """
   Compare facts_long YTD with reconstructed YTD from quarterly q_val.
 
-  Uses fiscal_year (not fy) for grouping to avoid comparative period
-  mixing.
+  Only compares data from original filings (fy == fiscal_year) to avoid
+  mixing comparative disclosures which may have different values.
 
-  We expect facts_long to contain fp in {Q1,Q2,Q3,FY} for cashflow YTD.
-  metrics_quarterly contains fp in {Q1,Q2,Q3,Q4}.
+  We expect facts_long to contain quarter in {Q1,Q2,Q3,Q4}.
+  metrics_quarterly contains quarter in {Q1,Q2,Q3,Q4}.
   """
   if ('fiscal_year' not in facts.columns or
       'fiscal_year' not in metrics_q.columns):
@@ -118,11 +123,24 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
         'ytd_identity', False,
         'Missing fiscal_year column in facts_long or metrics_quarterly')
 
-  f = facts[['cik10', 'metric', 'end', 'fiscal_year', 'fp', 'val']].copy()
-  m = metrics_q[['cik10', 'metric', 'end', 'fiscal_year', 'fp', 'q_val']].copy()
+  # Filter to original filings only (exclude comparative disclosures)
+  # Comparative disclosures (fy != fiscal_year) may have restated values
+  # that don't match the original YTD
+  if 'fy' in facts.columns:
+    facts = facts[facts['fy'] == facts['fiscal_year']].copy()
+  if 'fy' in metrics_q.columns:
+    metrics_q = metrics_q[metrics_q['fy'] == metrics_q['fiscal_year']].copy()
 
-  f['fp'] = f['fp'].astype(str)
-  m['fp'] = m['fp'].astype(str)
+  # Use quarter column (Q1-Q4), also keep fp for YTD logic
+  f = facts[[
+      'cik10', 'metric', 'end', 'fiscal_year', 'fiscal_quarter', 'fp', 'val'
+  ]].copy()
+  m = metrics_q[[
+      'cik10', 'metric', 'end', 'fiscal_year', 'fiscal_quarter', 'q_val'
+  ]].copy()
+
+  f['fiscal_quarter'] = f['fiscal_quarter'].astype(str)
+  m['fiscal_quarter'] = m['fiscal_quarter'].astype(str)
 
   ytd_metrics = [m for m, s in METRIC_SPECS.items() if s.get('is_ytd', False)]
   f_ytd = f[f['metric'].isin(ytd_metrics)].copy()
@@ -133,12 +151,12 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
                 'val'] = f_ytd.loc[f_ytd['metric'] == metric, 'val'].abs()
 
   mq = m.copy()
-  mq = mq[mq['fp'].isin(['Q1', 'Q2', 'Q3', 'Q4'])]
+  mq = mq[mq['fiscal_quarter'].isin(['Q1', 'Q2', 'Q3', 'Q4'])]
 
   pivot = (
       mq.pivot_table(
           index=['cik10', 'metric', 'fiscal_year'],
-          columns='fp',
+          columns='fiscal_quarter',
           values='q_val',
           aggfunc='last'  # type: ignore[arg-type]
       ).reset_index())
@@ -205,32 +223,77 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
       f'All comparable rows pass YTD identity (tol={tol}). '
       f'Compared rows={len(comp)}')
 
+
 def _check_ttm(metrics_q: pd.DataFrame, tol: float) -> CheckResult:
-  m = metrics_q.sort_values(['cik10', 'metric', 'end']).copy()
-  rolling_result = (m.groupby(
-      ['cik10', 'metric'])['q_val'].rolling(4).sum().reset_index(level=[0, 1],
-                                                                 drop=True))
-  m['ttm_recomputed'] = rolling_result
+  """
+  Check TTM correctness using PIT logic.
 
-  comp = m[pd.notna(m['ttm_val']) & pd.notna(m['ttm_recomputed'])].copy()
-  if comp.empty:
-    return CheckResult('ttm_check', False,
-                       'No comparable TTM rows found (need >=4 quarters).')
+  For PIT-based TTM, each row's ttm_val is computed from the 4 most recent
+  quarters available at that row's filed date (not simple rolling by end).
 
-  comp['diff'] = (comp['ttm_val'] - comp['ttm_recomputed']).abs()
-  bad = comp['diff'] > tol
-  if bad.any():
-    n = int(bad.sum())
-    sample = comp.loc[
-        bad,
-        ['cik10', 'metric', 'end', 'ttm_val', 'ttm_recomputed', 'diff']].head(
-            10)
+  This check validates that ttm_val matches a PIT-based recomputation.
+  """
+  m = metrics_q.copy()
+
+  # For PIT TTM validation, we need to check each row individually
+  # TTM should be sum of 4 most recent quarters where filed <= current filed
+  errors = []
+
+  for cik in m['cik10'].unique():
+    cik_data = m[m['cik10'] == cik].copy()
+
+    for metric in cik_data['metric'].unique():
+      metric_data = cik_data[cik_data['metric'] == metric].copy()
+      metric_data = metric_data.sort_values(['filed', 'end'])
+
+      for _, row in metric_data.iterrows():
+        if pd.isna(row['ttm_val']):
+          continue
+
+        filed = row['filed']
+
+        # Find 4 most recent quarters available at this filed date
+        available = metric_data[metric_data['filed'] <= filed]
+        available = available.drop_duplicates(subset=['end'], keep='last')
+        available = available.sort_values('end')
+        recent_4 = available.tail(4)
+
+        if len(recent_4) < 4:
+          continue
+
+        ttm_recomputed = recent_4['q_val'].sum()
+        diff = abs(row['ttm_val'] - ttm_recomputed)
+
+        if diff > tol:
+          errors.append({
+              'cik10': cik,
+              'metric': metric,
+              'end': row['end'],
+              'ttm_val': row['ttm_val'],
+              'ttm_recomputed': ttm_recomputed,
+              'diff': diff
+          })
+
+        if len(errors) >= 100:
+          break
+      if len(errors) >= 100:
+        break
+    if len(errors) >= 100:
+      break
+
+  total_with_ttm = m['ttm_val'].notna().sum()
+
+  if errors:
+    sample_df = pd.DataFrame(errors[:10])
     return CheckResult(
-        'ttm_check', False, f'{n}/{len(comp)} rows fail TTM check (tol={tol}). '
-        f'Sample:\n{sample.to_string(index=False)}')
+        'ttm_check', False,
+        f'{len(errors)}+ rows fail TTM check (tol={tol}, sampled first 100). '
+        f'Sample:\n{sample_df.to_string(index=False)}')
+
   return CheckResult(
-      'ttm_check', True, f'All comparable rows pass TTM check (tol={tol}). '
-      f'Compared rows={len(comp)}')
+      'ttm_check', True, f'TTM values pass PIT-based check (tol={tol}). '
+      f'Total rows with TTM={total_with_ttm}')
+
 
 def _check_capex_abs(metrics_q: pd.DataFrame, eps: float) -> CheckResult:
   cap = metrics_q[metrics_q['metric'] == 'CAPEX'].copy()
@@ -244,6 +307,7 @@ def _check_capex_abs(metrics_q: pd.DataFrame, eps: float) -> CheckResult:
     msg = f'{n} CAPEX rows have q_val < 0 (eps={eps}). Sample: {sample}'
     return CheckResult('capex_abs', False, msg)
   return CheckResult('capex_abs', True, f'All CAPEX q_val >= -{eps}')
+
 
 def _check_prices(prices: pd.DataFrame) -> list[CheckResult]:
   results: list[CheckResult] = []
@@ -266,6 +330,7 @@ def _check_prices(prices: pd.DataFrame) -> list[CheckResult]:
     results.append(CheckResult('prices_positive_close', True, 'All close > 0'))
 
   return results
+
 
 def _check_quarterly_completeness(
     companies: pd.DataFrame,
@@ -329,6 +394,7 @@ def _check_quarterly_completeness(
   return CheckResult('quarterly_completeness', True,
                      'All companies have reasonable quarterly coverage')
 
+
 def _manual_spotcheck(metrics_q: pd.DataFrame, fixture_path: Path,
                       tol: float) -> CheckResult:
   """
@@ -371,6 +437,7 @@ def _manual_spotcheck(metrics_q: pd.DataFrame, fixture_path: Path,
   return CheckResult('manual_spotcheck', True,
                      f'All fixture rows match (tol={tol}). Rows={len(merged)}')
 
+
 def main() -> None:
   ap = argparse.ArgumentParser(description='Validate Silver layer outputs')
   ap.add_argument('--silver-dir',
@@ -396,7 +463,6 @@ def main() -> None:
 
   facts_path = sec_dir / 'facts_long.parquet'
   metrics_q_path = sec_dir / 'metrics_quarterly.parquet'
-  metrics_h_path = sec_dir / 'metrics_quarterly_history.parquet'
   prices_path = stooq_dir / 'prices_daily.parquet'
   manual_fixture_path = Path('data/validation/sec_manual_spotcheck.csv')
 
@@ -410,8 +476,6 @@ def main() -> None:
 
   facts = pd.read_parquet(facts_path)
   metrics_q = pd.read_parquet(metrics_q_path)
-  metrics_h = pd.read_parquet(
-      metrics_h_path) if metrics_h_path.exists() else pd.DataFrame()
   prices = pd.read_parquet(
       prices_path) if prices_path.exists() else pd.DataFrame()
 
@@ -433,8 +497,7 @@ def main() -> None:
 
   print(f'Validating Silver layer: {silver_dir}')
   print(f'  Facts: {facts.shape}')
-  print(f'  Metrics (latest): {metrics_q.shape}')
-  print(f'  Metrics (history): {metrics_h.shape}')
+  print(f'  Metrics: {metrics_q.shape}')
   print(f"  Prices: {prices.shape if not prices.empty else 'N/A'}")
   print(f"  Companies: {companies.shape if not companies.empty else 'N/A'}")
   print(f"  Target date: {target_date or 'N/A'}")
@@ -445,37 +508,31 @@ def main() -> None:
   results.append(_check_schema(facts, FACTS_LONG_SCHEMA, 'facts_long'))
   results.append(
       _check_schema(metrics_q, METRICS_QUARTERLY_SCHEMA, 'metrics_quarterly'))
-  if not metrics_h.empty:
-    results.append(
-        _check_schema(metrics_h, METRICS_QUARTERLY_HISTORY_SCHEMA,
-                      'metrics_quarterly_history'))
   if not prices.empty:
     results.append(_check_schema(prices, PRICES_DAILY_SCHEMA, 'prices_daily'))
 
   # --- SEC tables ---
   _require_columns(facts, [
-      'cik10', 'metric', 'namespace', 'tag', 'unit', 'end', 'filed', 'fy', 'fp',
-      'form', 'val'
+      'cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed', 'end', 'fy',
+      'fp', 'namespace', 'tag', 'unit', 'form', 'val'
   ], 'facts_long')
   _require_columns(metrics_q, [
-      'cik10', 'metric', 'end', 'filed', 'fy', 'fp', 'q_val', 'ttm_val', 'tag'
+      'cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed', 'end', 'fy',
+      'q_val', 'ttm_val', 'tag'
   ], 'metrics_quarterly')
 
+  # Primary key: ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed']
   results.append(
-      _assert_unique(facts, ['cik10', 'metric', 'end', 'fy', 'fp'],
-                     'facts_unique_period'))
+      _assert_unique(
+          facts, ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'],
+          'facts_unique_period'))
   results.append(
-      _assert_unique(metrics_q, ['cik10', 'metric', 'end', 'fp'],
-                     'metrics_unique_period'))
-  if not metrics_h.empty:
-    results.append(
-        _assert_unique(metrics_h, ['cik10', 'metric', 'end', 'fp', 'filed'],
-                       'metrics_history_unique'))
+      _assert_unique(
+          metrics_q,
+          ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'],
+          'metrics_unique_period'))
   results.append(_assert_filed_ge_end(facts, 'facts_filed_ge_end'))
   results.append(_assert_filed_ge_end(metrics_q, 'metrics_filed_ge_end'))
-  if not metrics_h.empty:
-    results.append(
-        _assert_filed_ge_end(metrics_h, 'metrics_history_filed_ge_end'))
 
   results.append(_check_ytd_identity(facts, metrics_q, tol=float(args.tol)))
   results.append(_check_ttm(metrics_q, tol=float(args.tol)))
@@ -515,6 +572,7 @@ def main() -> None:
     raise SystemExit(1)
   else:
     print('\n✓ All validation checks passed!')
+
 
 if __name__ == '__main__':
   main()

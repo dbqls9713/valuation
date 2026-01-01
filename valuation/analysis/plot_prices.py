@@ -43,6 +43,15 @@ from valuation.scenarios.registry import create_policies
 logger = logging.getLogger(__name__)
 
 
+def _get_price_at_date(ticker_prices: pd.DataFrame,
+                       target_date: pd.Timestamp) -> Optional[float]:
+  """Get closing price at or before target_date."""
+  valid = ticker_prices[ticker_prices['date'] <= target_date]
+  if valid.empty:
+    return None
+  return float(valid.iloc[-1]['close'])
+
+
 def find_common_and_different_policies(
     scenarios: list[ScenarioConfig]
 ) -> tuple[dict[str, str], list[dict[str, str]]]:
@@ -213,6 +222,7 @@ def plot_scenario_comparison(
     end_date: pd.Timestamp,
     output_dir: Path,
     loader: ValuationDataLoader,
+    month_interval: int = 3,
 ) -> None:
   """Plot IV comparison for different scenarios vs market price."""
   ticker_panel = panel[panel['ticker'] == ticker].copy()
@@ -233,38 +243,49 @@ def plot_scenario_comparison(
     logger.error('No scenarios provided')
     return
 
-  quarter_ends = sorted(ticker_panel['end'].unique())
+  freq = f'{month_interval}M' if month_interval > 1 else 'M'
+  backtest_dates = pd.date_range(start=start_date, end=end_date, freq=freq)
 
   results: dict[str, list] = {'dates': [], 'market_price': []}
   for scenario in scenarios:
     results[scenario.name] = []
 
-  logger.info('Calculating IVs for %d scenarios across %d quarters...',
-              len(scenarios), len(quarter_ends))
+  logger.info(
+      'Calculating IVs for %d scenarios across %d dates (%d-month interval)...',
+      len(scenarios), len(backtest_dates), month_interval)
 
-  for as_of_date in quarter_ends:
-    scenario_results = {}
-    market_price = None
+  prices = loader.load_prices()
+  symbol = f'{ticker}.US'
+  ticker_prices = prices[prices['symbol'] == symbol].sort_values('date')
+
+  for as_of_date in backtest_dates:
+    market_price = _get_price_at_date(ticker_prices, as_of_date)
+    if market_price is None:
+      continue
+
+    scenario_ivs: dict[str, Optional[float]] = {}
 
     for scenario in scenarios:
       result = calculate_iv_for_date(panel, ticker, as_of_date, scenario,
                                      loader)
       if result:
-        scenario_results[scenario.name] = result['iv']
-        if not market_price and result['market_price']:
-          market_price = result['market_price']
+        scenario_ivs[scenario.name] = result['iv']
+      else:
+        scenario_ivs[scenario.name] = None
 
-    if len(scenario_results) == len(scenarios) and market_price:
-      results['dates'].append(as_of_date)
-      results['market_price'].append(market_price)
-      for scenario in scenarios:
-        results[scenario.name].append(scenario_results[scenario.name])
+    results['dates'].append(as_of_date)
+    results['market_price'].append(market_price)
+    for scenario in scenarios:
+      results[scenario.name].append(scenario_ivs.get(scenario.name))
 
   if len(results['dates']) == 0:
     logger.warning('No valid results for %s', ticker)
     return
 
-  logger.info('Generated %d data points', len(results['dates']))
+  iv_count = sum(1 for i in range(len(results['dates']))
+                 if any(results[s.name][i] is not None for s in scenarios))
+  logger.info('Generated %d dates (%d with IV data)', len(results['dates']),
+              iv_count)
 
   common_policies, different_policies = find_common_and_different_policies(
       scenarios)
@@ -280,20 +301,23 @@ def plot_scenario_comparison(
 
     short_label = create_short_label(different_policies[idx], scenario.name)
 
-    ax.plot(results['dates'],
-            results[scenario.name],
-            marker=marker,
-            linestyle='-',
-            label=short_label,
-            linewidth=2,
-            markersize=6,
-            alpha=0.8,
-            color=color)
+    iv_series = pd.Series(results[scenario.name], index=results['dates'])
+    valid_mask = iv_series.notna()
+    if valid_mask.any():
+      ax.plot(iv_series.index[valid_mask],
+              iv_series[valid_mask],
+              marker=marker,
+              linestyle='-',
+              label=short_label,
+              linewidth=2,
+              markersize=6,
+              alpha=0.8,
+              color=color)
 
   ax.plot(results['dates'],
           results['market_price'],
           'D-',
-          label='Market Price (filed+1d)',
+          label='Market Price',
           linewidth=2.5,
           markersize=7,
           color='red',
@@ -395,12 +419,16 @@ Examples:
                       help='Output directory for charts')
   parser.add_argument('--gold-path',
                       type=Path,
-                      default=Path('data/gold/out/valuation_panel.parquet'),
+                      default=Path('data/gold/out/backtest_panel.parquet'),
                       help='Path to Gold panel')
   parser.add_argument('--silver-dir',
                       type=Path,
                       default=Path('data/silver/out'),
                       help='Path to Silver directory')
+  parser.add_argument('--month-interval',
+                      type=int,
+                      default=3,
+                      help='Backtest interval in months (default: 3)')
   parser.add_argument('--verbose',
                       '-v',
                       action='store_true',
@@ -474,6 +502,7 @@ Examples:
         end_date=end,
         output_dir=args.output_dir,
         loader=loader,
+        month_interval=args.month_interval,
     )
 
   logger.info('All charts saved to: %s', args.output_dir)

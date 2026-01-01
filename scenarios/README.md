@@ -4,7 +4,7 @@ JSON-based scenario configurations for systematic valuation experiments.
 
 ## Directory Structure
 
-```
+```text
 scenarios/
 ├── base/                    # Core scenarios
 │   ├── default.json        # Standard 10% discount, weighted CAPEX
@@ -98,28 +98,34 @@ python -m valuation.analysis.backtest_from_configs \
 See `valuation/scenarios/registry.py` for all available policies:
 
 **CAPEX**:
+
 - `raw_ttm`: Raw trailing twelve months
 - `weighted_3y_123`: 3-year weighted (1:2:3)
 - `weighted_5y_12345`: 5-year weighted (1:2:3:4:5)
 - `intensity_clipped`: Intensity-based clipping
 
 **Growth**:
+
 - `cagr_3y_clip`: 3-year CAGR with 4% threshold, 0-18% clip
 - `cagr_5y_clip`: 5-year CAGR with 4% threshold, 0-18% clip
 
 **Fade**:
+
 - `linear`: Linear fade (1% spread)
 - `geometric`: Geometric/exponential fade
 - `step_5y`: Step for 5 years, then fade
 
 **Shares**:
+
 - `avg_5y`: 5-year average buyback rate
 - `zero_buyback`: No buyback assumed
 
 **Terminal**:
+
 - `gordon`: Gordon Growth at 3%
 
 **Discount**:
+
 - `fixed_0p06`: 6% discount rate
 - `fixed_0p08`: 8% discount rate
 - `fixed_0p10`: 10% discount rate

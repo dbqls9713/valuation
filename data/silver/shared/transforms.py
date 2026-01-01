@@ -1,8 +1,22 @@
 """
 Shared transformation utilities.
 """
+from datetime import date
 
 import pandas as pd
+
+# Non-leap year for consistent day-of-year calculations
+_REFERENCE_YEAR = 2001
+
+
+def _day_of_year(month: int, day: int) -> int:
+  """Get day of year (1-366) for given month/day using a reference year."""
+  # Clamp day to valid range for the month
+  try:
+    return date(_REFERENCE_YEAR, month, min(day, 28)).timetuple().tm_yday
+  except ValueError:
+    # Invalid date, use month end
+    return date(_REFERENCE_YEAR, month, 28).timetuple().tm_yday
 
 
 class TTMCalculator:
@@ -33,6 +47,7 @@ class TTMCalculator:
                                              drop=True)
 
     return df
+
 
 class FiscalYearCalculator:
   """Calculate fiscal year from calendar dates."""
@@ -67,8 +82,8 @@ class FiscalYearCalculator:
     """
     facts = facts.copy()
     facts = facts.merge(companies[['cik10', 'fye_mmdd']],
-                       on='cik10',
-                       how='left')
+                        on='cik10',
+                        how='left')
 
     facts['end'] = pd.to_datetime(facts['end'])
     facts['year'] = facts['end'].dt.year
@@ -78,19 +93,17 @@ class FiscalYearCalculator:
       if pd.isna(row['fye_mmdd']):
         return row['year']
 
-      # Parse fye_mmdd and current date mmdd to day-of-year for comparison
       fye_month = int(row['fye_mmdd'][:2])
       fye_day = int(row['fye_mmdd'][2:])
       cur_month = int(row['mmdd'][:2])
       cur_day = int(row['mmdd'][2:])
 
-      # Approximate day-of-year (good enough for this purpose)
-      fye_doy = fye_month * 31 + fye_day
-      cur_doy = cur_month * 31 + cur_day
+      fye_doy = _day_of_year(fye_month, fye_day)
+      cur_doy = _day_of_year(cur_month, cur_day)
 
       # Within ±7 days of FYE, or before FYE → current year
       # After FYE (beyond tolerance) → next year
-      tolerance = 7  # 7 days (in our month*31 approximation)
+      tolerance = 7
       if cur_doy <= fye_doy + tolerance:
         return row['year']
       return row['year'] + 1
@@ -99,3 +112,93 @@ class FiscalYearCalculator:
 
     facts = facts.drop(columns=['fye_mmdd', 'year', 'mmdd'])
     return facts
+
+
+class FiscalQuarterCalculator:
+  """Calculate fiscal quarter from calendar dates based on FYE."""
+
+  TOLERANCE = 7  # Days tolerance for quarter boundary matching
+
+  def calculate(self, df: pd.DataFrame, fye_map: dict[str, str]) -> pd.Series:
+    """
+    Calculate fiscal_quarter based on end date and company's FYE.
+
+    Each quarter end is ~3 months apart from FYE:
+    - Q1 end: FYE + 3 months
+    - Q2 end: FYE + 6 months
+    - Q3 end: FYE + 9 months
+    - Q4 end: FYE (fiscal year end)
+
+    A tolerance of ±7 days is applied to handle cases where the actual
+    period end date is close to but not exactly on the quarter end date.
+
+    Args:
+        df: DataFrame with 'cik10' and 'end' columns
+        fye_map: Dict mapping cik10 to fye_mmdd (e.g., '0926' for Sep 26)
+
+    Returns:
+        Series with fiscal_quarter values (Q1, Q2, Q3, Q4)
+    """
+
+    def get_quarter_boundaries(fye_mmdd: str) -> list[int]:
+      """Get day-of-year for each quarter end."""
+      if not fye_mmdd or len(str(fye_mmdd)) < 4:
+        fye_mmdd = '1231'  # Default to Dec 31
+
+      fye_month = int(str(fye_mmdd)[:2])
+      fye_day = int(str(fye_mmdd)[2:4])
+
+      # Q4 end = FYE
+      q4_doy = _day_of_year(fye_month, fye_day)
+
+      # Quarter ends are ~3 months apart (wraparound for months > 12)
+      def quarter_end_doy(months_after_fye: int) -> int:
+        m = ((fye_month + months_after_fye - 1) % 12) + 1
+        return _day_of_year(m, fye_day)
+
+      q1_doy = quarter_end_doy(3)
+      q2_doy = quarter_end_doy(6)
+      q3_doy = quarter_end_doy(9)
+
+      return [q1_doy, q2_doy, q3_doy, q4_doy]
+
+    def calc_quarter(row: pd.Series) -> str:
+      cik10 = row['cik10']
+      end_date = row['end']
+
+      fye_mmdd = fye_map.get(cik10) or '1231'
+      boundaries = get_quarter_boundaries(fye_mmdd)
+      q1_doy, q2_doy, q3_doy, q4_doy = boundaries
+
+      cur_doy = _day_of_year(end_date.month, end_date.day)
+      tolerance = self.TOLERANCE
+
+      # Check which quarter end the date is closest to (within tolerance)
+      if abs(cur_doy - q1_doy) <= tolerance:
+        return 'Q1'
+      if abs(cur_doy - q2_doy) <= tolerance:
+        return 'Q2'
+      if abs(cur_doy - q3_doy) <= tolerance:
+        return 'Q3'
+      if abs(cur_doy - q4_doy) <= tolerance:
+        return 'Q4'
+
+      # If not within tolerance of any boundary, determine by position
+      # Normalize to fiscal year starting after Q4 end
+      days_in_year = 365
+      fy_start_doy = (q4_doy % days_in_year) + 1
+
+      # Adjust cur_doy to be relative to FY start
+      if cur_doy >= fy_start_doy:
+        rel_doy = cur_doy - fy_start_doy
+      else:
+        rel_doy = (days_in_year - fy_start_doy) + cur_doy
+
+      # Each quarter is ~91 days (365/4)
+      quarter_len = days_in_year // 4
+      quarter_num = (rel_doy // quarter_len) + 1
+      quarter_num = min(quarter_num, 4)  # Cap at Q4
+
+      return f'Q{quarter_num}'
+
+    return df.apply(calc_quarter, axis=1)

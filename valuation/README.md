@@ -4,7 +4,7 @@ Strategy/policy-based DCF valuation system for rapid experimentation.
 
 ## Architecture
 
-```
+```text
 valuation/
 ├── domain/         # Typed domain objects (FundamentalsSlice, ValuationResult, etc.)
 ├── engine/         # Pure DCF math functions (no pandas, no I/O)
@@ -28,7 +28,7 @@ The framework uses a **two-stage DCF model** to calculate intrinsic value:
 
 **Owner Earnings** grow and get discounted to present value:
 
-```
+```text
 For each year t = 1 to N:
   OE(t) = OE(t-1) × (1 + g(t))           # Earnings growth
   Shares(t) = Shares(t-1) × (1 - b)      # Share buybacks
@@ -38,6 +38,7 @@ PV_explicit = Σ [ OEPS(t) / (1+r)^t ]    # Discount to present
 ```
 
 Where:
+
 - `OE(t)` = Owner Earnings (CFO - CAPEX) in year t
 - `g(t)` = Growth rate (typically fades from g0 to g_terminal)
 - `b` = Buyback rate (share reduction rate)
@@ -47,7 +48,7 @@ Where:
 
 **Perpetual growth** beyond the explicit period using Gordon Growth:
 
-```
+```text
 TV = OEPS(N) × (1 + g_terminal) / (r - g_terminal)
 PV_terminal = TV / (1+r)^N
 ```
@@ -56,7 +57,7 @@ Constraint: `r > g_terminal` (required for convergence)
 
 ### Total Intrinsic Value
 
-```
+```text
 IV per share = PV_explicit + PV_terminal
 ```
 
@@ -122,7 +123,9 @@ results.to_csv('backtest_results.csv')
 python -m valuation.run --ticker GOOGL --as-of 2023-06-30 --scenario default
 
 # Backtest
-python -m valuation.backtest.runner --ticker GOOGL --start-date 2022-01-01 --end-date 2023-12-31 --scenarios default raw_capex
+python -m valuation.backtest.runner --ticker GOOGL \
+  --start-date 2022-01-01 --end-date 2023-12-31 \
+  --scenarios default raw_capex
 ```
 
 ## Adding New Policies
@@ -175,32 +178,38 @@ result = run_valuation(ticker='GOOGL', as_of_date='2023-06-30', config=config)
 ## Available Policies
 
 ### CAPEX
+
 - `raw_ttm`: Raw TTM CAPEX
 - `weighted_3y_123`: 3-year weighted average (1:2:3)
 - `weighted_3y`: 3-year simple weighted average
 - `intensity_clipped`: Clip CAPEX/CFO ratio at 90th percentile
 
 ### Growth
+
 - `cagr_3y_clip`: 3-year CAGR, threshold 4%, clip 0-18%
 - `cagr_3y_clip_25`: 3-year CAGR, threshold 4%, clip 0-25%
 - `cagr_3y_no_clip`: 3-year CAGR, no clipping
 - `cagr_5y_clip`: 5-year CAGR, clip 0-18%
 
 ### Fade
+
 - `linear`: Linear fade from g0 to gT + 1%
 - `linear_0p02`: Linear fade from g0 to gT + 2%
 
 ### Shares
+
 - `avg_5y`: 5-year average share change
 - `avg_3y`: 3-year average share change
 - `avg_10y`: 10-year average share change
 
 ### Terminal
+
 - `gordon`: Gordon growth at 3%
 - `gordon_2pct`: Gordon growth at 2%
 - `gordon_4pct`: Gordon growth at 4%
 
 ### Discount
+
 - `fixed_0p06`: Fixed 6%
 - `fixed_0p08`: Fixed 8%
 - `fixed_0p10`: Fixed 10%

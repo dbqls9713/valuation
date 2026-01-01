@@ -13,11 +13,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from data.gold.panels.valuation import ValuationPanelBuilder
+from data.gold.panels import BacktestPanelBuilder
+from data.gold.panels import ValuationPanelBuilder
 
 logger = logging.getLogger(__name__)
 
-AVAILABLE_PANELS = ['valuation']
+AVAILABLE_PANELS = ['valuation', 'backtest']
+
+PANEL_BUILDERS = {
+    'valuation': ValuationPanelBuilder,
+    'backtest': BacktestPanelBuilder,
+}
 
 
 def build_panels(
@@ -43,15 +49,16 @@ def build_panels(
   for panel_name in panels:
     logger.info('Building: %s', panel_name)
 
-    if panel_name == 'valuation':
-      builder = ValuationPanelBuilder(
-          silver_dir=silver_dir,
-          gold_dir=gold_dir,
-          min_date=min_date,
-      )
-    else:
+    builder_cls = PANEL_BUILDERS.get(panel_name)
+    if builder_cls is None:
       logger.warning('Unknown panel: %s', panel_name)
       continue
+
+    builder = builder_cls(
+        silver_dir=silver_dir,
+        gold_dir=gold_dir,
+        min_date=min_date,
+    )
 
     panel = builder.build()
 
