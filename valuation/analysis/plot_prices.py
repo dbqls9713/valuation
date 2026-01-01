@@ -89,6 +89,21 @@ def find_common_and_different_policies(
   return common, different_per_scenario
 
 
+def get_policy_display_name(key: str) -> str:
+  """Get short display name for a policy key."""
+  names = {
+      'pre_maint_oe': 'pre_oe',
+      'maint_capex': 'capex',
+      'discount': 'disc',
+      'growth': 'growth',
+      'fade': 'fade',
+      'shares': 'shares',
+      'terminal': 'term',
+      'n_years': 'years',
+  }
+  return names.get(key, key)
+
+
 def create_short_label(different_policies: dict[str, str],
                        scenario_name: str) -> str:
   """Create short label showing only different policies."""
@@ -104,6 +119,40 @@ def create_short_label(different_policies: dict[str, str],
       parts.append(different_policies[key])
 
   return ' | '.join(parts) if parts else scenario_name
+
+
+def create_legend_header(different_policies_list: list[dict[str, str]]) -> str:
+  """Create column header for legend entries."""
+  if not different_policies_list or not different_policies_list[0]:
+    return ''
+
+  keys_order = [
+      'pre_maint_oe', 'maint_capex', 'discount', 'growth', 'fade', 'shares',
+      'terminal', 'n_years'
+  ]
+  header_parts = []
+  for key in keys_order:
+    if key in different_policies_list[0]:
+      header_parts.append(get_policy_display_name(key))
+
+  return ' | '.join(header_parts)
+
+
+def create_fixed_policies_text(common_policies: dict[str, str]) -> str:
+  """Create text showing fixed/common policies."""
+  if not common_policies:
+    return ''
+
+  common_parts = []
+  for key in [
+      'pre_maint_oe', 'maint_capex', 'discount', 'growth', 'fade', 'shares',
+      'terminal', 'n_years'
+  ]:
+    if key in common_policies:
+      display_name = get_policy_display_name(key)
+      common_parts.append(f'{display_name}={common_policies[key]}')
+
+  return '[fixed] ' + ', '.join(common_parts) if common_parts else ''
 
 
 def load_configs_from_files(config_paths: list[Path]) -> list[ScenarioConfig]:
@@ -337,27 +386,35 @@ def plot_scenario_comparison(
   title = f'{ticker} - Intrinsic Value Comparison vs Market Price'
   ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
 
-  if common_policies:
-    common_parts = []
-    for key in ['maint_capex', 'discount', 'growth', 'n_years']:
-      if key in common_policies:
-        common_parts.append(f'{key}={common_policies[key]}')
-    if common_parts:
-      subtitle = 'Common: ' + ', '.join(common_parts)
-      ax.text(0.5,
-              0.98,
-              subtitle,
-              transform=ax.transAxes,
-              ha='center',
-              va='top',
-              fontsize=9,
-              style='italic',
-              color='gray')
-
-  ax.legend(loc='upper left',
+  fixed_text = create_fixed_policies_text(common_policies)
+  if fixed_text:
+    ax.text(0.5,
+            0.98,
+            fixed_text,
+            transform=ax.transAxes,
+            ha='center',
+            va='top',
             fontsize=9,
-            framealpha=0.95,
-            bbox_to_anchor=(0, 0.95))
+            family='monospace',
+            fontweight='bold',
+            color='#333333',
+            bbox={
+                'facecolor': 'white',
+                'alpha': 0.9,
+                'edgecolor': '#888888',
+                'boxstyle': 'round,pad=0.3'
+            })
+
+  legend = ax.legend(loc='upper left',
+                     fontsize=9,
+                     framealpha=0.95,
+                     bbox_to_anchor=(0, 0.92))
+
+  legend_header = create_legend_header(different_policies)
+  if legend_header:
+    legend.set_title(legend_header, prop={'size': 8, 'family': 'monospace'})
+    legend.get_title().set_ha('center')
+
   ax.grid(True, alpha=0.3, linestyle='--')
 
   plt.tight_layout()

@@ -109,10 +109,9 @@ class ValuationDataLoader:
     """
     Adjust shares for stock splits across all tickers.
 
-    Uses only original filings (fy == fiscal_year) to detect splits.
-    Only adjusts rows filed BEFORE the split to avoid double-adjustment
-    from SEC comparative disclosures that already have retroactively
-    adjusted share counts.
+    Uses original filings (fy == fiscal_year) to detect splits, then
+    applies value-based adjustment to handle inconsistent SEC reporting
+    where some comparative disclosures use pre-split values.
 
     Args:
       panel: Raw Gold panel data
@@ -158,12 +157,20 @@ class ValuationDataLoader:
 
       for _, split_row in splits.iloc[::-1].iterrows():
         split_date = split_row['end']
-        split_filed = split_row['filed']
         split_ratio = split_row['shares_ratio']
+        post_split_shares = split_row['shares_q']
 
-        mask = ((ticker_data['end'] < split_date) &
-                (ticker_data['filed'] < split_filed))
-        ticker_data.loc[mask, 'shares_q'] *= split_ratio
+        pre_split_rows = ticker_data['end'] < split_date
+        for idx in ticker_data[pre_split_rows].index:
+          current_shares = ticker_data.loc[idx, 'shares_q']
+          if pd.isna(current_shares):
+            continue
+
+          expected_post_split = current_shares * split_ratio
+          ratio_to_reference = expected_post_split / post_split_shares
+
+          if 0.5 < ratio_to_reference < 2.0:
+            ticker_data.loc[idx, 'shares_q'] = expected_post_split
 
       adjusted_parts.append(ticker_data)
 

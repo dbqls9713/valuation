@@ -1,0 +1,11 @@
+{
+  "name": "ttm__fixed_0p06__fixed_0p07__linear__avg_5y__gordon__5y",
+  "pre_maint_oe": "ttm",
+  "maint_capex": "ttm",
+  "growth": "fixed_0p07",
+  "fade": "linear",
+  "shares": "avg_5y",
+  "terminal": "gordon",
+  "discount": "fixed_0p06",
+  "n_years": 5
+}
