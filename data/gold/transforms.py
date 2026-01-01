@@ -5,63 +5,118 @@ These functions handle common operations like pivoting metrics
 and joining with price data using point-in-time logic.
 """
 
-from typing import Optional
-
 import pandas as pd
 
 
-def pivot_metrics_wide(
-    metrics_q: pd.DataFrame,
-    metrics: Optional[list[str]] = None,
-) -> pd.DataFrame:
+def join_metrics_by_cfo_filed(metrics_q: pd.DataFrame) -> pd.DataFrame:
   """
-  Pivot metrics_quarterly from long to wide format.
+  Join metrics using CFO's filed date as the reference point.
+
+  For each CFO filing, finds the most recent CAPEX and SHARES values
+  that were available at that time (filed <= CFO filed date).
+
+  This ensures PIT-correct data: only information known at the
+  CFO filing date is used.
 
   Args:
-    metrics_q: Long-format metrics (cik10, metric, end, q_val, ttm_val, filed)
-    metrics: List of metrics to include (None = all)
+    metrics_q: Long-format metrics with columns:
+               cik10, metric, end, filed, q_val, ttm_val
 
   Returns:
-    Wide-format DataFrame with columns like cfo_q, cfo_ttm, capex_q, etc.
-
-  Note:
-    For PIT support, each unique (cik10, end, filed) combination is preserved.
-    This allows multiple versions of the same quarter end to coexist.
+    Wide-format DataFrame with columns:
+    cik10, end, filed, cfo_q, cfo_ttm, capex_q, capex_ttm, shares_q
   """
-  if metrics:
-    metrics_q = metrics_q[metrics_q['metric'].isin(metrics)].copy()
+  cfo = metrics_q[metrics_q['metric'] == 'CFO'].copy()
+  capex = metrics_q[metrics_q['metric'] == 'CAPEX'].copy()
+  shares = metrics_q[metrics_q['metric'] == 'SHARES'].copy()
 
-  metric_list = metrics_q['metric'].unique()
-  if len(metric_list) == 0:
-    return pd.DataFrame(columns=['cik10', 'end', 'filed'])
+  cfo = cfo.rename(columns={'q_val': 'cfo_q', 'ttm_val': 'cfo_ttm'})
+  cfo = cfo.drop(columns=['metric'])
+  cfo['end'] = pd.to_datetime(cfo['end'])
+  cfo['filed'] = pd.to_datetime(cfo['filed'])
 
-  parts = []
-  for metric in metric_list:
-    m = metrics_q[metrics_q['metric'] == metric].copy()
+  capex = capex.rename(columns={
+      'q_val': 'capex_q',
+      'ttm_val': 'capex_ttm',
+      'filed': 'filed_capex'
+  })
+  capex = capex.drop(columns=['metric'])
+  capex['end'] = pd.to_datetime(capex['end'])
+  capex['filed_capex'] = pd.to_datetime(capex['filed_capex'])
 
-    # Include 'filed' in index to preserve all versions for PIT
-    m_wide = m.pivot_table(
-        index=['cik10', 'end', 'filed'],
-        values=['q_val', 'ttm_val'],
-        aggfunc={
-            'q_val': 'first',
-            'ttm_val': 'first',
-        },
-    ).reset_index()
+  shares = shares.rename(columns={'q_val': 'shares_q', 'filed': 'filed_shares'})
+  shares = shares.drop(columns=['metric', 'ttm_val'], errors='ignore')
+  shares['end'] = pd.to_datetime(shares['end'])
+  shares['filed_shares'] = pd.to_datetime(shares['filed_shares'])
 
-    metric_lower = metric.lower()
-    m_wide = m_wide.rename(columns={
-        'q_val': f'{metric_lower}_q',
-        'ttm_val': f'{metric_lower}_ttm',
-    })
+  result_parts = []
 
-    parts.append(m_wide)
+  for cik in cfo['cik10'].unique():
+    cfo_cik = cfo[cfo['cik10'] == cik]
+    capex_cik = capex[capex['cik10'] == cik]
+    shares_cik = shares[shares['cik10'] == cik]
 
-  result = parts[0]
-  for part in parts[1:]:
-    result = result.merge(part, on=['cik10', 'end', 'filed'], how='outer')
+    for end_date in cfo_cik['end'].unique():
+      cfo_end = cfo_cik[cfo_cik['end'] == end_date].sort_values('filed')
+      capex_end = capex_cik[capex_cik['end'] == end_date].sort_values(
+          'filed_capex')
+      shares_end = shares_cik[shares_cik['end'] == end_date].sort_values(
+          'filed_shares')
 
-  return result  # type: ignore[no-any-return]
+      if cfo_end.empty:
+        continue
+
+      merged = cfo_end.copy()
+
+      if not capex_end.empty:
+        merged = pd.merge_asof(
+            merged.sort_values('filed'),
+            capex_end[['filed_capex', 'capex_q', 'capex_ttm']],
+            left_on='filed',
+            right_on='filed_capex',
+            direction='backward',
+        )
+      else:
+        merged['capex_q'] = None
+        merged['capex_ttm'] = None
+
+      if not shares_end.empty:
+        merged = pd.merge_asof(
+            merged.sort_values('filed'),
+            shares_end[['filed_shares', 'shares_q']],
+            left_on='filed',
+            right_on='filed_shares',
+            direction='backward',
+        )
+      else:
+        merged['shares_q'] = None
+
+      result_parts.append(merged)
+
+  if not result_parts:
+    return pd.DataFrame(columns=[
+        'cik10', 'end', 'filed', 'cfo_q', 'cfo_ttm', 'capex_q', 'capex_ttm',
+        'shares_q'
+    ])
+
+  cleaned = []
+  for df in result_parts:
+    if df.empty:
+      continue
+    df = df.dropna(axis=1, how='all')
+    if not df.empty:
+      cleaned.append(df)
+
+  if not cleaned:
+    return pd.DataFrame(columns=[
+        'cik10', 'end', 'filed', 'cfo_q', 'cfo_ttm', 'capex_q', 'capex_ttm',
+        'shares_q'
+    ])
+
+  result: pd.DataFrame = pd.concat(cleaned, ignore_index=True)
+  result = result.drop(columns=['filed_capex', 'filed_shares'], errors='ignore')
+
+  return result
 
 
 def join_prices_pit(

@@ -17,8 +17,8 @@ from data.gold.config.schemas import BACKTEST_PANEL_SCHEMA
 from data.gold.config.schemas import PanelSchema
 from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
 from data.gold.transforms import calculate_market_cap
+from data.gold.transforms import join_metrics_by_cfo_filed
 from data.gold.transforms import join_prices_pit
-from data.gold.transforms import pivot_metrics_wide
 from data.shared.io import ParquetWriter
 
 
@@ -53,20 +53,14 @@ class _BasePanelBuilder(ABC):
     return companies, metrics_q, prices
 
   def _build_wide_metrics(self, metrics_q: pd.DataFrame) -> pd.DataFrame:
-    """Pivot metrics to wide format with forward fill."""
-    metrics_wide = pivot_metrics_wide(metrics_q, metrics=self.REQUIRED_METRICS)
+    """
+    Join metrics using CFO's filed date as the reference point.
 
-    # Forward fill CFO and CAPEX within each (cik10, end) group
-    for cik in metrics_wide['cik10'].unique():
-      cik_mask = metrics_wide['cik10'] == cik
-      for end_date in metrics_wide[cik_mask]['end'].unique():
-        end_mask = (metrics_wide['end'] == end_date) & cik_mask
-        group = metrics_wide[end_mask].sort_values('filed')
-        for col in ['cfo_q', 'cfo_ttm', 'capex_q', 'capex_ttm']:
-          if col in metrics_wide.columns:
-            metrics_wide.loc[end_mask, col] = group[col].ffill().values
-
-    return metrics_wide
+    For each CFO filing, CAPEX and SHARES are joined using the most recent
+    values available at that time (filed <= CFO filed date).
+    """
+    filtered = metrics_q[metrics_q['metric'].isin(self.REQUIRED_METRICS)]
+    return join_metrics_by_cfo_filed(filtered)
 
   def _filter_complete_rows(self, df: pd.DataFrame) -> pd.DataFrame:
     """Keep only rows with both CFO_TTM and CAPEX_TTM."""
