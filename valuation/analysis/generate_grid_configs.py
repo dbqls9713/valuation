@@ -5,22 +5,22 @@ This script creates JSON config files for all combinations of parameters,
 enabling systematic exploration of the parameter space.
 
 Usage:
-  # CAPEX × Discount grid
+  # Maint CAPEX × Discount grid
   python -m valuation.analysis.generate_grid_configs \
-    --capex raw_ttm weighted_3y_123 intensity_clipped \
+    --maint-capex ttm weighted_3y_123 intensity_clipped \
     --discount fixed_0p06 fixed_0p08 fixed_0p10 fixed_0p12 \
     --output-dir scenarios/grid_search
 
-  # Full grid (CAPEX × Discount × N-Years)
+  # Full grid (Maint CAPEX × Discount × N-Years)
   python -m valuation.analysis.generate_grid_configs \
-    --capex raw_ttm weighted_3y_123 \
+    --maint-capex ttm weighted_3y_123 \
     --discount fixed_0p10 fixed_0p12 \
     --n-years 5 10 15 \
     --output-dir scenarios/grid_search_full
 
   # Multi-dimensional grid
   python -m valuation.analysis.generate_grid_configs \
-    --capex raw_ttm weighted_3y_123 \
+    --maint-capex ttm weighted_3y_123 \
     --discount fixed_0p08 fixed_0p10 fixed_0p12 \
     --n-years 10 15 \
     --output-dir scenarios/grid_search_multi
@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 
 def generate_grid_configs(
-    capex_options: list[str],
+    pre_maint_oe_options: list[str],
+    maint_capex_options: list[str],
     discount_options: list[str],
     growth_options: list[str],
     fade_options: list[str],
@@ -51,7 +52,8 @@ def generate_grid_configs(
   Generate all combinations of policy parameters.
 
   Args:
-    capex_options: List of CAPEX policy names
+    pre_maint_oe_options: List of Pre-Maintenance OE policy names
+    maint_capex_options: List of Maintenance CAPEX policy names
     discount_options: List of discount policy names
     growth_options: List of growth policy names
     fade_options: List of fade policy names
@@ -65,7 +67,8 @@ def generate_grid_configs(
   configs = []
 
   combinations = product(
-      capex_options,
+      pre_maint_oe_options,
+      maint_capex_options,
       discount_options,
       growth_options,
       fade_options,
@@ -74,13 +77,17 @@ def generate_grid_configs(
       n_years_options,
   )
 
-  for capex, discount, growth, fade, shares, terminal, n_years in combinations:
-    parts = [capex, discount, growth, fade, shares, terminal, f'{n_years}y']
+  for (pre_maint_oe, maint_capex, discount, growth, fade, shares, terminal,
+       n_years) in combinations:
+    parts = [
+        maint_capex, discount, growth, fade, shares, terminal, f'{n_years}y'
+    ]
     name = '__'.join(parts)
 
     config = ScenarioConfig(
         name=name,
-        capex=capex,
+        pre_maint_oe=pre_maint_oe,
+        maint_capex=maint_capex,
         growth=growth,
         fade=fade,
         shares=shares,
@@ -120,17 +127,21 @@ def main():
   parser = argparse.ArgumentParser(
       description='Generate grid search scenario configs')
 
-  parser.add_argument('--capex',
+  parser.add_argument('--pre-maint-oe',
                       nargs='+',
-                      default=['weighted_3y_123'],
-                      help='CAPEX policy options')
+                      default=['ttm'],
+                      help='Pre-Maintenance OE policy options')
+  parser.add_argument('--maint-capex',
+                      nargs='+',
+                      default=['ttm'],
+                      help='Maintenance CAPEX policy options')
   parser.add_argument('--discount',
                       nargs='+',
                       default=['fixed_0p10'],
                       help='Discount policy options')
   parser.add_argument('--growth',
                       nargs='+',
-                      default=['cagr_3y_clip'],
+                      default=['fixed_0p10'],
                       help='Growth policy options')
   parser.add_argument('--fade',
                       nargs='+',
@@ -159,7 +170,8 @@ def main():
   logger.info('Generating grid search configs...')
   logger.info('')
   logger.info('Parameters:')
-  logger.info('  CAPEX: %s', args.capex)
+  logger.info('  Pre-Maint OE: %s', args.pre_maint_oe)
+  logger.info('  Maint CAPEX: %s', args.maint_capex)
   logger.info('  Discount: %s', args.discount)
   logger.info('  Growth: %s', args.growth)
   logger.info('  Fade: %s', args.fade)
@@ -169,7 +181,8 @@ def main():
   logger.info('')
 
   configs = generate_grid_configs(
-      capex_options=args.capex,
+      pre_maint_oe_options=args.pre_maint_oe,
+      maint_capex_options=args.maint_capex,
       discount_options=args.discount,
       growth_options=args.growth,
       fade_options=args.fade,

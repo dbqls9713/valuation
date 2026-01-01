@@ -1,6 +1,15 @@
 # Gold Layer: Model-Ready Valuation Panels
 
-Model-ready datasets joining all metrics, fundamentals, and prices.
+Model-ready datasets with quarterly/TTM values joined with prices.
+
+## Responsibilities
+
+Gold layer performs:
+
+1. **YTD to Quarterly Conversion**: `Q2 = Q2_YTD - Q1_YTD`
+2. **TTM Calculation**: Sum of last 4 quarters
+3. **Metric Joining**: CFO, CAPEX, SHARES into wide format
+4. **Price Joining**: PIT-safe price assignment
 
 ## Outputs
 
@@ -16,9 +25,6 @@ All filed versions - for **PIT backtesting**.
 
 **Primary Key**: `(ticker, end, filed)`
 
-**Shares Normalization**: All shares values are normalized to the latest filed
-version for each `(ticker, end)` to ensure consistency with split-adjusted prices.
-
 ### Common Columns
 
 | Column | Type | Description |
@@ -26,6 +32,8 @@ version for each `(ticker, end)` to ensure consistency with split-adjusted price
 | `ticker` | str | Stock ticker symbol |
 | `end` | datetime | Period end date (quarter end) |
 | `filed` | datetime | Filing date (when data became public) |
+| `fiscal_year` | int | Calculated fiscal year |
+| `fiscal_quarter` | str | Q1, Q2, Q3, Q4 |
 | `cfo_q` | float | Operating cash flow (quarterly discrete) |
 | `cfo_ttm` | float | Operating cash flow (trailing 12 months) |
 | `capex_q` | float | Capital expenditures (quarterly, positive) |
@@ -46,6 +54,30 @@ python -m data.gold.build --panel valuation
 python -m data.gold.build --panel backtest
 ```
 
+## YTD to Quarterly Conversion
+
+SEC cash flow statements report YTD cumulative values:
+
+```text
+Q1 filing: CFO_Q1_YTD = $100M → CFO_Q1 = $100M
+Q2 filing: CFO_Q2_YTD = $250M → CFO_Q2 = $250M - $100M = $150M
+Q3 filing: CFO_Q3_YTD = $400M → CFO_Q3 = $400M - $250M = $150M
+FY filing: CFO_FY_YTD = $600M → CFO_Q4 = $600M - $400M = $200M
+```
+
+Uses PIT logic: for each filing, only uses previous quarter data that was filed
+before the current filing date.
+
+## TTM Calculation
+
+Trailing Twelve Months = sum of most recent 4 quarters:
+
+```text
+CFO_TTM = CFO_Q1 + CFO_Q2 + CFO_Q3 + CFO_Q4
+```
+
+Requires 4 quarters of data; otherwise NULL.
+
 ## Point-in-Time Logic
 
 **Critical for backtesting:**
@@ -53,50 +85,6 @@ python -m data.gold.build --panel backtest
 1. `filed` date determines when data was publicly available
 2. Price is joined using `merge_asof` with `direction="forward"`
 3. For Q1 2020 filed on 2020-04-30: uses first price on or after 2020-04-30
-
-### Shares Normalization (backtest_panel only)
-
-When stock splits occur, older SEC filings have pre-split share counts while
-prices are split-adjusted. The `backtest_panel` normalizes all shares to the
-latest filed version:
-
-```text
-Example: WMT 3:1 split in Feb 2024
-
-Before normalization:
-  2023-01-31 (filed 2023-03-17): shares = 2.7B (pre-split)
-  2023-01-31 (filed 2025-03-14): shares = 8.2B (post-split, restated)
-
-After normalization:
-  2023-01-31 (filed 2023-03-17): shares = 8.2B (normalized)
-  2023-01-31 (filed 2025-03-14): shares = 8.2B
-```
-
-This ensures OE per share calculations are consistent with split-adjusted prices.
-
-## Usage
-
-### Current Valuation
-
-```python
-import pandas as pd
-
-panel = pd.read_parquet('data/gold/out/valuation_panel.parquet')
-googl = panel[panel['ticker'] == 'GOOGL']
-```
-
-### Backtesting with PIT
-
-```python
-panel = pd.read_parquet('data/gold/out/backtest_panel.parquet')
-
-# Filter to data available as of 2023-06-30
-as_of = '2023-06-30'
-pit_data = panel[panel['filed'] <= as_of]
-
-# Get latest filed version for each (ticker, end)
-latest = pit_data.sort_values('filed').groupby(['ticker', 'end']).tail(1)
-```
 
 ## Validation
 
@@ -111,15 +99,19 @@ Checks:
 3. `filed >= end` constraint
 4. Owner Earnings positive ratio
 
-## Data Quality Notes
+## Relationship with Other Layers
 
-### Missing Data
+```text
+Silver → Gold → Valuation
+         ^^^
+         YTD→Q, TTM, Join
+```
 
-- Ticker may not have prices (not in Stooq)
-- Quarter may not have all metrics (not reported or tag mismatch)
-- Result: NaN in respective columns
+**Input from Silver:**
 
-### Market Cap Calculation
+- `facts_long.parquet`: YTD values with all filed versions
 
-- Uses `shares_q` (point-in-time shares for that quarter)
-- If shares missing → market_cap will be NaN
+**Output to Valuation:**
+
+- `valuation_panel.parquet`: Latest version for current analysis
+- `backtest_panel.parquet`: All versions for PIT backtesting

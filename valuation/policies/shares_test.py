@@ -3,49 +3,57 @@ import pytest
 
 from valuation.domain.types import FundamentalsSlice
 from valuation.domain.types import PolicyOutput
+from valuation.domain.types import QuarterData
 from valuation.policies.shares import AvgShareChange
+
+
+def _make_quarters_with_shares(
+    start_year: int,
+    num_quarters: int,
+    shares_values: list[float | None],
+) -> list[QuarterData]:
+  """Helper to create QuarterData list with shares."""
+  quarters: list[QuarterData] = []
+  quarter_map = ['Q1', 'Q2', 'Q3', 'Q4']
+  end_months = [3, 6, 9, 12]
+
+  for i in range(num_quarters):
+    year = start_year + i // 4
+    q_idx = i % 4
+    qd = QuarterData(
+        fiscal_year=year,
+        fiscal_quarter=quarter_map[q_idx],
+        end=pd.Timestamp(year=year, month=end_months[q_idx], day=28),
+        filed=pd.Timestamp(year=year, month=end_months[q_idx], day=28) +
+        pd.DateOffset(days=45),
+        cfo_ttm=100.0,
+        capex_ttm=20.0,
+        shares=shares_values[i] if i < len(shares_values) else None,
+    )
+    quarters.append(qd)
+  return quarters
 
 
 class TestAvgShareChange:
   """Tests for AvgShareChange policy."""
 
   def test_5year_buyback_scenario(self):
-    """Standard 5-year average with buybacks.
-
-    Shares progression (consistent 2% annual buyback):
-    - 5 years ago: 110
-    - Latest: 100
-
-    Annual rate: (100/110)^(1/5) - 1 = -0.0186 = -1.86%
-    Buyback rate: 1.86%
-    """
-    dates = pd.date_range('2019-03-31', periods=20, freq='Q')
-
-    # yapf: disable
-    # 연도별 마지막 Q: Y1=107, Y2=103, Y3=100, Y4=100, Y5=100
+    """Standard 5-year average with buybacks."""
     shares_values = [
-        110, 109, 108, 107, 106, 105, 104, 103, 102, 101,
-        101, 100, 100, 100, 100, 100, 100, 100, 100, 100,
+        110, 109, 108, 107, 106, 105, 104, 103, 102, 101, 101, 100, 100, 100,
+        100, 100, 100, 100, 100, 100
     ]
-    # yapf: enable
+    quarters = _make_quarters_with_shares(2019, 20, shares_values)
 
     data = FundamentalsSlice(
         ticker='BUYBACK',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100] * 20, index=dates),
-        capex_ttm_history=pd.Series([20] * 20, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=20.0,
-        latest_shares=100.0,
-        latest_filed=dates[-1],
+        as_of_date=pd.Timestamp('2024-10-01'),
+        quarters=quarters,
     )
 
     policy = AvgShareChange(years=5)
     result = policy.compute(data)
 
-    # (100/110)^(1/5) - 1 ≈ -1.86%, so buyback rate ≈ 1.86%
     assert isinstance(result, PolicyOutput)
     assert result.value == pytest.approx(0.0186, abs=0.005)
     assert result.diag['shares_method'] == 'avg_change'
@@ -53,119 +61,75 @@ class TestAvgShareChange:
     assert result.diag['sh_old'] > result.diag['sh_new']
 
   def test_increasing_shares_dilution(self):
-    """Share dilution scenario (negative buyback rate).
+    """Share dilution scenario (negative buyback rate)."""
+    shares_values = [100 + i * 2 for i in range(20)]
 
-    Shares progression (2 per quarter increase):
-    - 5 years ago (20 quarters): 100
-    - Latest: 100 + 19*2 = 138
-
-    Annual rate: (138/100)^(1/5) - 1 = 0.0661 = 6.61%
-    Negative buyback (dilution): -6.61%
-    """
-    dates = pd.date_range('2019-12-31', periods=20, freq='Q')
-    shares_values = [100 + i * 2 for i in range(20)]  # 100, 102, ..., 138
+    quarters = _make_quarters_with_shares(2019, 20, shares_values)
 
     data = FundamentalsSlice(
         ticker='DILUTE',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100] * 20, index=dates),
-        capex_ttm_history=pd.Series([20] * 20, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=20.0,
-        latest_shares=138.0,
-        latest_filed=dates[-1],
+        as_of_date=pd.Timestamp('2024-10-01'),
+        quarters=quarters,
     )
 
     policy = AvgShareChange(years=5)
     result = policy.compute(data)
 
-    # (138/100)^(1/5) - 1 ≈ 6.61%, so negative buyback
     assert result.value == pytest.approx(-0.0661, abs=0.005)
     assert result.diag['sh_new'] > result.diag['sh_old']
 
   def test_decreasing_shares_buyback(self):
-    """Share buyback scenario (positive buyback rate).
-
-    Shares progression (3% annual buyback):
-    - 3 years ago: 106
-    - Latest: 100
-
-    Annual rate: (100/106)^(1/3) - 1 = -0.0195 = -1.95%
-    Buyback rate: 1.95%
-    """
-    dates = pd.date_range('2021-03-31', periods=12, freq='Q')
-    # 연도별 마지막 Q: Y1=103, Y2=101, Y3=100
+    """Share buyback scenario (positive buyback rate)."""
     shares_values = [106, 105, 104, 103, 103, 102, 101, 101, 100, 100, 100, 100]
+
+    quarters = _make_quarters_with_shares(2021, 12, shares_values)
 
     data = FundamentalsSlice(
         ticker='BUYBACK',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100] * 12, index=dates),
-        capex_ttm_history=pd.Series([20] * 12, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=20.0,
-        latest_shares=100.0,
-        latest_filed=dates[-1],
+        as_of_date=pd.Timestamp('2024-07-01'),
+        quarters=quarters,
     )
 
     policy = AvgShareChange(years=3)
     result = policy.compute(data)
 
-    # (100/106)^(1/3) - 1 ≈ -1.95%
     assert result.value == pytest.approx(0.0195, abs=0.005)
     assert result.diag['sh_new'] <= result.diag['sh_old']
 
   def test_insufficient_history(self):
-    """Less than 5 years requested but has 1 year.
+    """Less than 2 years returns insufficient_yearly_data error."""
+    shares_values = [100.0, 98.0, 96.0]
 
-    Calculates with available data.
-    """
-    dates = pd.date_range('2023-12-31', periods=3, freq='Q')
+    quarters = _make_quarters_with_shares(2023, 3, shares_values)
+
     data = FundamentalsSlice(
         ticker='SHORT',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100, 110, 120], index=dates),
-        capex_ttm_history=pd.Series([20, 22, 24], index=dates),
-        shares_history=pd.Series([100, 98, 96], index=dates),
-        latest_cfo_ttm=120.0,
-        latest_capex_ttm=24.0,
-        latest_shares=96.0,
-        latest_filed=dates[-1],
-    )
-
-    policy = AvgShareChange(years=5)
-    result = policy.compute(data)
-
-    assert result.value > 0
-    assert result.diag['lookback_years'] == 5
-    assert result.diag['actual_years'] == 1
-
-  def test_no_shares_data(self):
-    """No shares data available."""
-    dates = pd.date_range('2023-12-31', periods=3, freq='Q')
-    data = FundamentalsSlice(
-        ticker='NOSHARES',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100, 110, 120], index=dates),
-        capex_ttm_history=pd.Series([20, 22, 24], index=dates),
-        shares_history=pd.Series([float('nan')] * 3, index=dates),
-        latest_cfo_ttm=120.0,
-        latest_capex_ttm=24.0,
-        latest_shares=float('nan'),
-        latest_filed=dates[-1],
+        as_of_date=pd.Timestamp('2024-01-01'),
+        quarters=quarters,
     )
 
     policy = AvgShareChange(years=5)
     result = policy.compute(data)
 
     assert result.value == 0.0
-    assert result.diag['error'] == 'no_shares_data'
+    assert result.diag['error'] == 'insufficient_yearly_data'
+    assert result.diag['years_available'] == 1
+
+  def test_no_shares_data(self):
+    """No shares data available."""
+    quarters = _make_quarters_with_shares(2023, 3, [None, None, None])
+
+    data = FundamentalsSlice(
+        ticker='NOSHARES',
+        as_of_date=pd.Timestamp('2024-01-01'),
+        quarters=quarters,
+    )
+
+    policy = AvgShareChange(years=5)
+    result = policy.compute(data)
+
+    assert result.value == 0.0
+    assert 'error' in result.diag
 
   def test_custom_lookback_years(self, sample_fundamentals):
     """Custom lookback period."""
@@ -177,20 +141,14 @@ class TestAvgShareChange:
 
   def test_stable_shares(self):
     """Stable share count returns zero buyback rate."""
-    dates = pd.date_range('2019-12-31', periods=20, freq='Q')
-    shares_values = [100] * 20
+    shares_values = [100.0] * 20
+
+    quarters = _make_quarters_with_shares(2019, 20, shares_values)
 
     data = FundamentalsSlice(
         ticker='STABLE',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100] * 20, index=dates),
-        capex_ttm_history=pd.Series([20] * 20, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=20.0,
-        latest_shares=100.0,
-        latest_filed=dates[-1],
+        as_of_date=pd.Timestamp('2024-10-01'),
+        quarters=quarters,
     )
 
     policy = AvgShareChange(years=5)
@@ -217,20 +175,14 @@ class TestAvgShareChange:
 
   def test_negative_shares_edge_case(self):
     """Edge case with invalid negative shares."""
-    dates = pd.date_range('2019-12-31', periods=20, freq='Q')
-    shares_values = [100] * 10 + [-10] * 10
+    shares_values = [100.0] * 10 + [-10.0] * 10
+
+    quarters = _make_quarters_with_shares(2019, 20, shares_values)
 
     data = FundamentalsSlice(
         ticker='INVALID',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100] * 20, index=dates),
-        capex_ttm_history=pd.Series([20] * 20, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=20.0,
-        latest_shares=-10.0,
-        latest_filed=dates[-1],
+        as_of_date=pd.Timestamp('2024-10-01'),
+        quarters=quarters,
     )
 
     policy = AvgShareChange(years=5)

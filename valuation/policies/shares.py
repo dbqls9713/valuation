@@ -53,65 +53,59 @@ class AvgShareChange(SharePolicy):
 
   def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
     """Compute CAGR of share change over lookback period."""
-    shares_series = data.shares_history.dropna()
+    if not data.quarters:
+      return PolicyOutput(
+          value=0.0, diag={
+              'shares_method': 'avg_change',
+              'error': 'no_shares_data',
+          })
 
-    if shares_series.empty:
-      return PolicyOutput(value=0.0,
-                          diag={
-                              'shares_method': 'avg_change',
-                              'error': 'no_shares_data',
-                          })
+    lookback_date = data.as_of_date - pd.DateOffset(years=self.years)
 
-    lookback = data.as_of_end - pd.DateOffset(years=self.years)
-    mask = pd.to_datetime(shares_series.index) >= lookback
-    recent_shares = shares_series[mask]
-
-    if len(recent_shares) < 2:
-      return PolicyOutput(value=0.0,
-                          diag={
-                              'shares_method': 'avg_change',
-                              'error': 'insufficient_shares_history',
-                              'quarters_available': len(recent_shares),
-                          })
-
-    shares_df = recent_shares.reset_index()
-    shares_df.columns = pd.Index(['end', 'shares'])
-    shares_df['year'] = pd.to_datetime(shares_df['end']).dt.year
-
-    yearly_shares = shares_df.groupby('year')['shares'].last()
+    yearly_shares: dict[int, float] = {}
+    for q in data.quarters:
+      if q.shares is None:
+        continue
+      if q.end < lookback_date:
+        continue
+      year = q.fiscal_year
+      yearly_shares[year] = q.shares
 
     if len(yearly_shares) < 2:
-      return PolicyOutput(value=0.0,
-                          diag={
-                              'shares_method': 'avg_change',
-                              'error': 'insufficient_yearly_data',
-                              'years_available': len(yearly_shares),
-                          })
+      return PolicyOutput(
+          value=0.0,
+          diag={
+              'shares_method': 'avg_change',
+              'error': 'insufficient_yearly_data',
+              'years_available': len(yearly_shares),
+          })
 
-    years = sorted(yearly_shares.index)
-    sh_old = yearly_shares[years[0]]
-    sh_new = yearly_shares[years[-1]]
-    years_diff = years[-1] - years[0]
+    years_list = sorted(yearly_shares.keys())
+    sh_old = yearly_shares[years_list[0]]
+    sh_new = yearly_shares[years_list[-1]]
+    years_diff = years_list[-1] - years_list[0]
 
     if years_diff <= 0 or sh_old <= 0 or sh_new <= 0:
-      return PolicyOutput(value=0.0,
-                          diag={
-                              'shares_method': 'avg_change',
-                              'error': 'invalid_share_values',
-                              'sh_old': float(sh_old),
-                              'sh_new': float(sh_new),
-                          })
+      return PolicyOutput(
+          value=0.0,
+          diag={
+              'shares_method': 'avg_change',
+              'error': 'invalid_share_values',
+              'sh_old': sh_old,
+              'sh_new': sh_new,
+          })
 
     buyback_rate = 1.0 - (sh_new / sh_old)**(1.0 / years_diff)
 
-    return PolicyOutput(value=buyback_rate,
-                        diag={
-                            'shares_method': 'avg_change',
-                            'lookback_years': self.years,
-                            'actual_years': years_diff,
-                            'sh_old': float(sh_old),
-                            'sh_new': float(sh_new),
-                            'first_year': int(years[0]),
-                            'last_year': int(years[-1]),
-                            'buyback_rate': buyback_rate,
-                        })
+    return PolicyOutput(
+        value=buyback_rate,
+        diag={
+            'shares_method': 'avg_change',
+            'lookback_years': self.years,
+            'actual_years': years_diff,
+            'sh_old': sh_old,
+            'sh_new': sh_new,
+            'first_year': years_list[0],
+            'last_year': years_list[-1],
+            'buyback_rate': buyback_rate,
+        })

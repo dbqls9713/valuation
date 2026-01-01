@@ -31,9 +31,14 @@ def join_metrics_by_cfo_filed(metrics_q: pd.DataFrame) -> pd.DataFrame:
   shares = metrics_q[metrics_q['metric'] == 'SHARES'].copy()
 
   cfo = cfo.rename(columns={'q_val': 'cfo_q', 'ttm_val': 'cfo_ttm'})
-  cfo = cfo.drop(columns=['metric'])
+  cfo = cfo.drop(columns=['metric'], errors='ignore')
   cfo['end'] = pd.to_datetime(cfo['end'])
   cfo['filed'] = pd.to_datetime(cfo['filed'])
+  # Preserve fiscal columns from CFO (reference metric)
+  fiscal_cols = ['fiscal_year', 'fiscal_quarter']
+  for col in fiscal_cols:
+    if col not in cfo.columns:
+      cfo[col] = None
 
   capex = capex.rename(columns={
       'q_val': 'capex_q',
@@ -95,8 +100,8 @@ def join_metrics_by_cfo_filed(metrics_q: pd.DataFrame) -> pd.DataFrame:
 
   if not result_parts:
     return pd.DataFrame(columns=[
-        'cik10', 'end', 'filed', 'cfo_q', 'cfo_ttm', 'capex_q', 'capex_ttm',
-        'shares_q'
+        'cik10', 'end', 'filed', 'fiscal_year', 'fiscal_quarter', 'cfo_q',
+        'cfo_ttm', 'capex_q', 'capex_ttm', 'shares_q'
     ])
 
   cleaned = []
@@ -109,8 +114,8 @@ def join_metrics_by_cfo_filed(metrics_q: pd.DataFrame) -> pd.DataFrame:
 
   if not cleaned:
     return pd.DataFrame(columns=[
-        'cik10', 'end', 'filed', 'cfo_q', 'cfo_ttm', 'capex_q', 'capex_ttm',
-        'shares_q'
+        'cik10', 'end', 'filed', 'fiscal_year', 'fiscal_quarter', 'cfo_q',
+        'cfo_ttm', 'capex_q', 'capex_ttm', 'shares_q'
     ])
 
   result: pd.DataFrame = pd.concat(cleaned, ignore_index=True)

@@ -53,8 +53,9 @@ class SensitivityTableBuilder:
     self.base_config = base_config
     self.policies = create_policies(base_config)
 
-    capex_result = self.policies['capex'].compute(fundamentals)
-    self.oe0 = fundamentals.latest_cfo_ttm - capex_result.value
+    pre_maint_oe_result = self.policies['pre_maint_oe'].compute(fundamentals)
+    maint_capex_result = self.policies['maint_capex'].compute(fundamentals)
+    self.oe0 = pre_maint_oe_result.value - maint_capex_result.value
 
     shares_result = self.policies['shares'].compute(fundamentals)
     self.sh0 = fundamentals.latest_shares
@@ -262,14 +263,9 @@ Examples:
 
   if args.scenario == 'default':
     config = ScenarioConfig.default()
-  elif args.scenario == 'raw_capex':
-    config = ScenarioConfig.raw_capex()
-  elif args.scenario == 'clipped_capex':
-    config = ScenarioConfig.clipped_capex()
-  elif args.scenario == 'discount_6pct':
-    config = ScenarioConfig.discount_6pct()
   else:
-    raise ValueError(f'Unknown scenario: {args.scenario}')
+    raise ValueError(
+        f'Unknown scenario: {args.scenario}. Available: default')
 
   logger.info('Using scenario: %s', args.scenario)
 

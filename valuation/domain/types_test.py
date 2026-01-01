@@ -5,96 +5,118 @@ import pytest
 
 from valuation.domain.types import FundamentalsSlice
 from valuation.domain.types import PreparedInputs
+from valuation.domain.types import QuarterData
 from valuation.domain.types import ValuationResult
+
+
+class TestQuarterData:
+  """Tests for QuarterData dataclass."""
+
+  def test_period_property(self):
+    """period property returns formatted string."""
+    qd = QuarterData(
+        fiscal_year=2023,
+        fiscal_quarter='Q1',
+        end=pd.Timestamp('2023-03-31'),
+        filed=pd.Timestamp('2023-05-01'),
+        cfo_ttm=100.0,
+    )
+    assert qd.period == '2023Q1'
+
+  def test_optional_fields_default_none(self):
+    """Optional fields default to None."""
+    qd = QuarterData(
+        fiscal_year=2023,
+        fiscal_quarter='Q1',
+        end=pd.Timestamp('2023-03-31'),
+        filed=pd.Timestamp('2023-05-01'),
+    )
+    assert qd.cfo_ttm is None
+    assert qd.capex_ttm is None
+    assert qd.shares is None
 
 
 class TestFundamentalsSlice:
   """Tests for FundamentalsSlice dataclass."""
 
+  def _make_panel(self, num_quarters: int = 4) -> pd.DataFrame:
+    """Create test panel with fiscal_year/fiscal_quarter columns."""
+    rows = []
+    for i in range(num_quarters):
+      year = 2022 + i // 4
+      q = i % 4 + 1
+      month = q * 3
+      rows.append({
+          'ticker': 'AAPL',
+          'end': pd.Timestamp(year=year, month=month, day=28),
+          'filed': pd.Timestamp(year=year, month=month, day=28) +
+          pd.Timedelta(days=45),
+          'fiscal_year': year,
+          'fiscal_quarter': f'Q{q}',
+          'cfo_ttm': 100 + i * 10,
+          'capex_ttm': 20 + i * 2,
+          'shares_q': 100 - i * 2,
+      })
+    return pd.DataFrame(rows)
+
   def test_from_panel_normal_case(self):
     """Construct from panel with valid data."""
-    dates = pd.date_range('2022-03-31', periods=4, freq='Q')
-    panel = pd.DataFrame({
-        'ticker': ['AAPL'] * 4,
-        'end': dates,
-        'filed': dates + pd.Timedelta(days=45),
-        'cfo_ttm': [100, 110, 120, 130],
-        'capex_ttm': [20, 22, 24, 26],
-        'shares_q': [100, 98, 96, 94],
-    })
+    panel = self._make_panel(4)
+    as_of = panel['filed'].max() + pd.Timedelta(days=5)
 
-    as_of = dates[-1] + pd.Timedelta(days=50)
     result = FundamentalsSlice.from_panel(panel, 'AAPL', as_of)
 
     assert result.ticker == 'AAPL'
     assert result.latest_cfo_ttm == 130.0
     assert result.latest_capex_ttm == 26.0
     assert result.latest_shares == 94.0
+    assert len(result.quarters) == 4
 
   def test_from_panel_no_ticker(self):
     """Missing ticker raises ValueError."""
-    dates = pd.date_range('2022-03-31', periods=4, freq='Q')
-    panel = pd.DataFrame({
-        'ticker': ['AAPL'] * 4,
-        'end': dates,
-        'filed': dates + pd.Timedelta(days=45),
-        'cfo_ttm': [100, 110, 120, 130],
-        'capex_ttm': [20, 22, 24, 26],
-        'shares_q': [100, 98, 96, 94],
-    })
+    panel = self._make_panel(4)
+    as_of = panel['filed'].max()
 
     with pytest.raises(ValueError, match='No data for ticker MSFT'):
-      FundamentalsSlice.from_panel(panel, 'MSFT', dates[-1])
+      FundamentalsSlice.from_panel(panel, 'MSFT', as_of)
 
   def test_from_panel_no_pit_data(self):
     """No data as of date raises ValueError."""
-    dates = pd.date_range('2022-03-31', periods=4, freq='Q')
-    panel = pd.DataFrame({
-        'ticker': ['AAPL'] * 4,
-        'end': dates,
-        'filed': dates + pd.Timedelta(days=45),
-        'cfo_ttm': [100, 110, 120, 130],
-        'capex_ttm': [20, 22, 24, 26],
-        'shares_q': [100, 98, 96, 94],
-    })
+    panel = self._make_panel(4)
+    early_date = panel['filed'].min() - pd.Timedelta(days=365)
 
-    early_date = dates[0] - pd.Timedelta(days=365)
     with pytest.raises(ValueError, match='No data for AAPL as of'):
       FundamentalsSlice.from_panel(panel, 'AAPL', early_date)
 
   def test_from_panel_missing_required_fields(self):
     """Missing required fields raises ValueError."""
-    dates = pd.date_range('2022-03-31', periods=4, freq='Q')
-    panel = pd.DataFrame({
-        'ticker': ['AAPL'] * 4,
-        'end': dates,
-        'filed': dates + pd.Timedelta(days=45),
-        'cfo_ttm': [100, 110, 120, float('nan')],
-        'capex_ttm': [20, 22, 24, 26],
-        'shares_q': [100, 98, 96, 94],
-    })
+    panel = self._make_panel(4)
+    panel.loc[panel.index[-1], 'cfo_ttm'] = float('nan')
+    as_of = panel['filed'].max() + pd.Timedelta(days=5)
 
-    as_of = dates[-1] + pd.Timedelta(days=50)
     with pytest.raises(ValueError, match='Missing required data'):
       FundamentalsSlice.from_panel(panel, 'AAPL', as_of)
 
   def test_pit_filtering(self):
     """PIT filtering excludes future data."""
-    dates = pd.date_range('2022-03-31', periods=4, freq='Q')
-    panel = pd.DataFrame({
-        'ticker': ['AAPL'] * 4,
-        'end': dates,
-        'filed': dates + pd.Timedelta(days=45),
-        'cfo_ttm': [100, 110, 120, 130],
-        'capex_ttm': [20, 22, 24, 26],
-        'shares_q': [100, 98, 96, 94],
-    })
+    panel = self._make_panel(4)
+    as_of = panel['filed'].iloc[2] + pd.Timedelta(days=5)
 
-    as_of = dates[2] + pd.Timedelta(days=50)
     result = FundamentalsSlice.from_panel(panel, 'AAPL', as_of)
 
     assert result.latest_cfo_ttm == 120.0
-    assert len(result.cfo_ttm_history) == 3
+    assert len(result.quarters) == 3
+
+  def test_history_properties(self):
+    """History properties return correct lists."""
+    panel = self._make_panel(4)
+    as_of = panel['filed'].max() + pd.Timedelta(days=5)
+
+    result = FundamentalsSlice.from_panel(panel, 'AAPL', as_of)
+
+    assert result.cfo_ttm_history == [100.0, 110.0, 120.0, 130.0]
+    assert result.capex_ttm_history == [20.0, 22.0, 24.0, 26.0]
+    assert result.shares_history == [100.0, 98.0, 96.0, 94.0]
 
 
 class TestPreparedInputs:

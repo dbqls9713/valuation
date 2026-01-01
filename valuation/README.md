@@ -9,7 +9,8 @@ valuation/
 ├── domain/         # Typed domain objects (FundamentalsSlice, ValuationResult, etc.)
 ├── engine/         # Pure DCF math functions (no pandas, no I/O)
 ├── policies/       # Pluggable estimation policies
-│   ├── capex.py    # RawTTMCapex, WeightedAverageCapex, IntensityClippedCapex
+│   ├── oe.py       # TTMOwnerEarnings, AvgQuarterlyOE, MedianQuarterlyOE
+│   ├── capex.py    # TTMCapex, WeightedAverageCapex, IntensityClippedCapex
 │   ├── growth.py   # CAGRGrowth (with threshold/clipping)
 │   ├── fade.py     # LinearFade, StepFade
 │   ├── shares.py   # AvgShareChange (buyback rate)
@@ -67,7 +68,7 @@ All inputs prepared by **policies**:
 
 | Input | Policy | Description |
 |-------|--------|-------------|
-| OE0 | CAPEX | CFO(TTM) - CAPEX(TTM) |
+| OE0 | OE | Owner Earnings (TTM, avg, or median) |
 | Shares | Shares | Current diluted shares |
 | b | Shares | Buyback rate (5yr CAGR) |
 | g0 | Growth | Initial growth (3yr CAGR, clipped) |
@@ -177,9 +178,17 @@ result = run_valuation(ticker='GOOGL', as_of_date='2023-06-30', config=config)
 
 ## Available Policies
 
+### Owner Earnings (OE)
+
+- `ttm`: CFO_TTM - CAPEX (standard)
+- `avg_4q`: Average of last 4 quarters (annualized)
+- `avg_8q`: Average of last 8 quarters (annualized)
+- `median`: Median of last 8 quarters (outlier resistant)
+- `latest_q`: Latest quarter (annualized)
+
 ### CAPEX
 
-- `raw_ttm`: Raw TTM CAPEX
+- `ttm`: Raw TTM CAPEX
 - `weighted_3y_123`: 3-year weighted average (1:2:3)
 - `weighted_3y`: 3-year simple weighted average
 - `intensity_clipped`: Clip CAPEX/CFO ratio at 90th percentile

@@ -64,7 +64,10 @@ def find_common_and_different_policies(
   if not scenarios:
     return {}, []
 
-  policy_fields = ['capex', 'growth', 'fade', 'shares', 'terminal', 'discount']
+  policy_fields = [
+      'pre_maint_oe', 'maint_capex', 'growth', 'fade', 'shares', 'terminal',
+      'discount'
+  ]
   common: dict[str, str] = {}
   different_per_scenario: list[dict[str, str]] = [{} for _ in scenarios]
 
@@ -86,6 +89,21 @@ def find_common_and_different_policies(
   return common, different_per_scenario
 
 
+def get_policy_display_name(key: str) -> str:
+  """Get short display name for a policy key."""
+  names = {
+      'pre_maint_oe': 'pre_oe',
+      'maint_capex': 'capex',
+      'discount': 'disc',
+      'growth': 'growth',
+      'fade': 'fade',
+      'shares': 'shares',
+      'terminal': 'term',
+      'n_years': 'years',
+  }
+  return names.get(key, key)
+
+
 def create_short_label(different_policies: dict[str, str],
                        scenario_name: str) -> str:
   """Create short label showing only different policies."""
@@ -94,12 +112,47 @@ def create_short_label(different_policies: dict[str, str],
 
   parts = []
   for key in [
-      'capex', 'discount', 'growth', 'fade', 'shares', 'terminal', 'n_years'
+      'pre_maint_oe', 'maint_capex', 'discount', 'growth', 'fade', 'shares',
+      'terminal', 'n_years'
   ]:
     if key in different_policies:
       parts.append(different_policies[key])
 
   return ' | '.join(parts) if parts else scenario_name
+
+
+def create_legend_header(different_policies_list: list[dict[str, str]]) -> str:
+  """Create column header for legend entries."""
+  if not different_policies_list or not different_policies_list[0]:
+    return ''
+
+  keys_order = [
+      'pre_maint_oe', 'maint_capex', 'discount', 'growth', 'fade', 'shares',
+      'terminal', 'n_years'
+  ]
+  header_parts = []
+  for key in keys_order:
+    if key in different_policies_list[0]:
+      header_parts.append(get_policy_display_name(key))
+
+  return ' | '.join(header_parts)
+
+
+def create_fixed_policies_text(common_policies: dict[str, str]) -> str:
+  """Create text showing fixed/common policies."""
+  if not common_policies:
+    return ''
+
+  common_parts = []
+  for key in [
+      'pre_maint_oe', 'maint_capex', 'discount', 'growth', 'fade', 'shares',
+      'terminal', 'n_years'
+  ]:
+    if key in common_policies:
+      display_name = get_policy_display_name(key)
+      common_parts.append(f'{display_name}={common_policies[key]}')
+
+  return '[fixed] ' + ', '.join(common_parts) if common_parts else ''
 
 
 def load_configs_from_files(config_paths: list[Path]) -> list[ScenarioConfig]:
@@ -154,18 +207,30 @@ def calculate_iv_for_date(
 
   policies = create_policies(scenario)
 
-  capex_result = policies['capex'].compute(fundamentals)
-  if pd.isna(capex_result.value):
+  pre_maint_oe_result = policies['pre_maint_oe'].compute(fundamentals)
+  if pd.isna(pre_maint_oe_result.value):
     return None
 
-  oe0 = fundamentals.latest_cfo_ttm - capex_result.value
-
-  growth_result = policies['growth'].compute(fundamentals, policies['capex'])
-  if pd.isna(growth_result.value):
+  maint_capex_result = policies['maint_capex'].compute(fundamentals)
+  if pd.isna(maint_capex_result.value):
     return None
 
-  if growth_result.diag.get('below_threshold', False):
-    return None
+  oe0 = pre_maint_oe_result.value - maint_capex_result.value
+
+  growth_result = policies['growth'].compute(fundamentals)
+
+  if pd.isna(growth_result.value) or growth_result.diag.get(
+      'below_threshold', False):
+    return {
+        'iv': 0.0,
+        'growth': 0.0,
+        'oe0': oe0,
+        'shares': fundamentals.latest_shares,
+        'buyback': 0.0,
+        'market_price': None,
+        'pv_explicit': 0.0,
+        'terminal_value': 0.0,
+    }
 
   terminal_result = policies['terminal'].compute()
   g_terminal = terminal_result.value
@@ -192,26 +257,28 @@ def calculate_iv_for_date(
       discount_rate=discount_rate,
   )
 
-  if not pd.isna(iv) and iv > 0:
-    try:
-      market_slice = get_price_after_filing(ticker, fundamentals.latest_filed,
-                                            loader)
-      market_price = market_slice.price
-    except (FileNotFoundError, ValueError):
-      market_price = None
+  if pd.isna(iv):
+    return None
 
-    return {
-        'iv': iv,
-        'growth': growth_result.value,
-        'oe0': oe0,
-        'shares': sh0,
-        'buyback': buyback_rate,
-        'market_price': market_price,
-        'pv_explicit': pv_explicit,
-        'terminal_value': tv,
-    }
+  display_iv = max(0.0, iv)
 
-  return None
+  try:
+    market_slice = get_price_after_filing(ticker, fundamentals.latest_filed,
+                                          loader)
+    market_price = market_slice.price
+  except (FileNotFoundError, ValueError):
+    market_price = None
+
+  return {
+      'iv': display_iv,
+      'growth': growth_result.value,
+      'oe0': oe0,
+      'shares': sh0,
+      'buyback': buyback_rate,
+      'market_price': market_price,
+      'pv_explicit': pv_explicit,
+      'terminal_value': tv,
+  }
 
 
 def plot_scenario_comparison(
@@ -293,7 +360,7 @@ def plot_scenario_comparison(
   _, ax = plt.subplots(figsize=(14, 8))
 
   markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'X', 'P', 'h']
-  colors = plt.cm.tab10.colors
+  colors = plt.colormaps['tab10'].colors  # type: ignore[attr-defined]
 
   for idx, scenario in enumerate(scenarios):
     marker = markers[idx % len(markers)]
@@ -321,7 +388,7 @@ def plot_scenario_comparison(
           linewidth=2.5,
           markersize=7,
           color='red',
-          alpha=0.9)
+          alpha=1.0)
 
   ax.set_xlabel('Quarter End Date', fontsize=12, fontweight='bold')
   ax.set_ylabel('Price per Share ($)', fontsize=12, fontweight='bold')
@@ -329,27 +396,35 @@ def plot_scenario_comparison(
   title = f'{ticker} - Intrinsic Value Comparison vs Market Price'
   ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
 
-  if common_policies:
-    common_parts = []
-    for key in ['capex', 'discount', 'growth', 'n_years']:
-      if key in common_policies:
-        common_parts.append(f'{key}={common_policies[key]}')
-    if common_parts:
-      subtitle = 'Common: ' + ', '.join(common_parts)
-      ax.text(0.5,
-              0.98,
-              subtitle,
-              transform=ax.transAxes,
-              ha='center',
-              va='top',
-              fontsize=9,
-              style='italic',
-              color='gray')
-
-  ax.legend(loc='upper left',
+  fixed_text = create_fixed_policies_text(common_policies)
+  if fixed_text:
+    ax.text(0.5,
+            0.98,
+            fixed_text,
+            transform=ax.transAxes,
+            ha='center',
+            va='top',
             fontsize=9,
-            framealpha=0.95,
-            bbox_to_anchor=(0, 0.95))
+            family='monospace',
+            fontweight='bold',
+            color='#333333',
+            bbox={
+                'facecolor': 'white',
+                'alpha': 0.9,
+                'edgecolor': '#888888',
+                'boxstyle': 'round,pad=0.3'
+            })
+
+  legend = ax.legend(loc='upper left',
+                     fontsize=9,
+                     framealpha=0.95,
+                     bbox_to_anchor=(0, 0.92))
+
+  legend_header = create_legend_header(different_policies)
+  if legend_header:
+    legend.set_title(legend_header, prop={'size': 8, 'family': 'monospace'})
+    legend.get_title().set_ha('center')
+
   ax.grid(True, alpha=0.3, linestyle='--')
 
   plt.tight_layout()

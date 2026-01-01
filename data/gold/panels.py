@@ -4,6 +4,12 @@ Gold layer panel builders.
 Builds model-ready panels for DCF analysis:
 - valuation_panel: Latest version for current valuation
 - backtest_panel: All filed versions for PIT backtesting
+
+Gold layer responsibilities:
+- Load facts_long from Silver (YTD values)
+- Convert YTD to quarterly values
+- Calculate TTM (Trailing Twelve Months)
+- Join with prices using PIT logic
 """
 
 from abc import ABC
@@ -13,6 +19,7 @@ from typing import Optional
 
 import pandas as pd
 
+from data.gold.aggregation import build_quarterly_metrics
 from data.gold.config.schemas import BACKTEST_PANEL_SCHEMA
 from data.gold.config.schemas import PanelSchema
 from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
@@ -47,10 +54,17 @@ class _BasePanelBuilder(ABC):
   def _load_data(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load required data from Silver layer."""
     companies = pd.read_parquet(self.silver_dir / 'sec' / 'companies.parquet')
-    metrics_q = pd.read_parquet(self.silver_dir / 'sec' /
-                                'metrics_quarterly.parquet')
+    facts = pd.read_parquet(self.silver_dir / 'sec' / 'facts_long.parquet')
     prices = pd.read_parquet(self.silver_dir / 'stooq' / 'prices_daily.parquet')
-    return companies, metrics_q, prices
+    return companies, facts, prices
+
+  def _build_quarterly_metrics(self, facts: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert facts (YTD) to quarterly values with TTM.
+
+    This is the main aggregation step that was previously in Silver layer.
+    """
+    return build_quarterly_metrics(facts)
 
   def _build_wide_metrics(self, metrics_q: pd.DataFrame) -> pd.DataFrame:
     """
@@ -61,11 +75,6 @@ class _BasePanelBuilder(ABC):
     """
     filtered = metrics_q[metrics_q['metric'].isin(self.REQUIRED_METRICS)]
     return join_metrics_by_cfo_filed(filtered)
-
-  def _filter_complete_rows(self, df: pd.DataFrame) -> pd.DataFrame:
-    """Keep only rows with both CFO_TTM and CAPEX_TTM."""
-    mask = df['cfo_ttm'].notna() & df['capex_ttm'].notna()
-    return df[mask].copy()
 
   def validate(self) -> list[str]:
     """Validate the built panel against schema."""
@@ -87,7 +96,7 @@ class _BasePanelBuilder(ABC):
         output_path,
         inputs=[
             self.silver_dir / 'sec' / 'companies.parquet',
-            self.silver_dir / 'sec' / 'metrics_quarterly.parquet',
+            self.silver_dir / 'sec' / 'facts_long.parquet',
             self.silver_dir / 'stooq' / 'prices_daily.parquet',
         ],
         metadata={
@@ -137,13 +146,12 @@ class BacktestPanelBuilder(_BasePanelBuilder):
 
   def build(self) -> pd.DataFrame:
     """Build backtest panel with all PIT versions."""
-    companies, metrics_q, prices = self._load_data()
+    companies, facts, prices = self._load_data()
+
+    # YTD -> Quarterly + TTM (aggregation moved from Silver)
+    metrics_q = self._build_quarterly_metrics(facts)
 
     metrics_wide = self._build_wide_metrics(metrics_q)
-    metrics_wide = self._filter_complete_rows(metrics_wide)
-
-    # Note: Shares are NOT normalized here to preserve PIT consistency.
-    # Split adjustment is handled by ValuationDataLoader._adjust_for_splits
 
     metrics_wide = metrics_wide.merge(
         companies[['cik10', 'ticker']],
@@ -181,10 +189,12 @@ class ValuationPanelBuilder(_BasePanelBuilder):
 
   def build(self) -> pd.DataFrame:
     """Build valuation panel with latest version per period."""
-    companies, metrics_q, prices = self._load_data()
+    companies, facts, prices = self._load_data()
+
+    # YTD -> Quarterly + TTM (aggregation moved from Silver)
+    metrics_q = self._build_quarterly_metrics(facts)
 
     metrics_wide = self._build_wide_metrics(metrics_q)
-    metrics_wide = self._filter_complete_rows(metrics_wide)
 
     # Keep only latest filed version per (cik10, end)
     metrics_wide = metrics_wide.sort_values('filed')

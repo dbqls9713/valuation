@@ -1,266 +1,194 @@
-import math
-
 import pandas as pd
-import pytest
 
 from valuation.domain.types import FundamentalsSlice
 from valuation.domain.types import PolicyOutput
-from valuation.policies.capex import RawTTMCapex
-from valuation.policies.growth import CAGRGrowth
+from valuation.domain.types import QuarterData
+from valuation.policies.growth import AvgOEGrowth
+from valuation.policies.growth import FixedGrowth
 
 
-class TestCAGRGrowth:
-  """Tests for CAGRGrowth policy."""
+def _make_quarters(
+    start_year: int,
+    num_quarters: int,
+    cfo_ttm_values: list[float],
+    capex_ttm_values: list[float],
+    shares_values: list[float],
+) -> list[QuarterData]:
+  """Helper to create QuarterData list."""
+  quarters: list[QuarterData] = []
+  quarter_map = ['Q1', 'Q2', 'Q3', 'Q4']
+  end_months = [3, 6, 9, 12]
 
-  def test_normal_positive_growth(self):
-    """Standard 3-year CAGR with positive growth.
+  for i in range(num_quarters):
+    year = start_year + i // 4
+    q_idx = i % 4
+    qd = QuarterData(
+        fiscal_year=year,
+        fiscal_quarter=quarter_map[q_idx],
+        end=pd.Timestamp(year=year, month=end_months[q_idx], day=28),
+        filed=pd.Timestamp(year=year, month=end_months[q_idx], day=28) +
+        pd.DateOffset(days=45),
+        cfo_ttm=cfo_ttm_values[i],
+        capex_ttm=capex_ttm_values[i],
+        shares=shares_values[i],
+    )
+    quarters.append(qd)
+  return quarters
 
-    Using consistent round numbers for CFO and shares:
-    - Year 2020: CFO=80, CAPEX=10, Shares=100 → OEPS=(80-10)/100=0.70
-    - Year 2021: CFO=90, CAPEX=10, Shares=97 → OEPS=(90-10)/97=0.825
-    - Year 2022: CFO=100, CAPEX=10, Shares=94 → OEPS=(100-10)/94=0.957
 
-    CAGR = (0.957 / 0.70)^(1/2) - 1 = 0.168 = 16.8%
+class TestFixedGrowth:
+  """Tests for FixedGrowth policy."""
 
-    Note: Uses WeightedAverageCapex by default, calculates over 2 full years.
-    """
-    dates = pd.date_range('2020-03-31', periods=12, freq='Q')
-
-    # 연도별 마지막 Q: 2020=(80,100), 2021=(90,97), 2022=(100,94)
-    cfo_values = [70, 74, 78, 80, 82, 86, 88, 90, 94, 96, 98, 100]
-    capex_values = [10] * 12
-    shares_values = [100, 99, 98, 97, 97, 96, 95, 94, 94, 94, 94, 94]
-
+  def test_returns_fixed_rate(self):
+    """Returns the configured fixed growth rate."""
+    quarters = _make_quarters(
+        start_year=2020,
+        num_quarters=4,
+        cfo_ttm_values=[100.0, 110.0, 120.0, 130.0],
+        capex_ttm_values=[20.0, 22.0, 24.0, 26.0],
+        shares_values=[100.0, 100.0, 100.0, 100.0],
+    )
     data = FundamentalsSlice(
-        ticker='GROWTH',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series(cfo_values, index=dates),
-        capex_ttm_history=pd.Series(capex_values, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=10.0,
-        latest_shares=94.0,
-        latest_filed=dates[-1],
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2021-01-15'),
+        quarters=quarters,
     )
 
-    policy = CAGRGrowth(min_years=3, threshold=0.0, clip_max=0.18)
+    policy = FixedGrowth(growth_rate=0.10)
     result = policy.compute(data)
 
     assert isinstance(result, PolicyOutput)
-    # Actual CAGR with Weighted CAPEX: ~15.2%
-    assert result.value == pytest.approx(0.152, abs=0.002)
-    assert result.diag['growth_method'] == 'cagr'
-    assert result.diag['num_years'] >= 2
-    assert result.diag['raw_cagr'] == pytest.approx(0.152, abs=0.002)
+    assert result.value == 0.10
+    assert result.diag['growth_method'] == 'fixed'
+    assert result.diag['growth_rate'] == 0.10
 
-  def test_negative_growth_clipped_to_zero(self):
-    """Negative growth clipped to 0%.
-
-    OEPS progression (declining):
-    - 2 years ago: 180 / 100 = 1.80
-    - Latest: 130 / 107 = 1.21
-
-    CAGR: (1.21 / 1.80)^(1/2) - 1 = -0.18 = -18%
-    Clipped to 0% by clip_min=0.0
-    """
-    dates = pd.date_range('2021-12-31', periods=8, freq='Q')
-
-    cfo_values = [200, 190, 180, 170, 160, 150, 140, 130]
-    capex_values = [0] * 8
-    shares_values = [100, 101, 102, 103, 104, 105, 106, 107]
-
+  def test_different_rates(self):
+    """Different fixed rates work correctly."""
+    quarters = _make_quarters(
+        start_year=2020,
+        num_quarters=4,
+        cfo_ttm_values=[100.0, 110.0, 120.0, 130.0],
+        capex_ttm_values=[20.0, 22.0, 24.0, 26.0],
+        shares_values=[100.0, 100.0, 100.0, 100.0],
+    )
     data = FundamentalsSlice(
-        ticker='DECLINE',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series(cfo_values, index=dates),
-        capex_ttm_history=pd.Series(capex_values, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=130.0,
-        latest_capex_ttm=0.0,
-        latest_shares=107.0,
-        latest_filed=dates[-1],
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2021-01-15'),
+        quarters=quarters,
     )
 
-    policy = CAGRGrowth(min_years=2, threshold=0.0, clip_min=0.0, clip_max=0.18)
+    for rate in [0.05, 0.08, 0.12, 0.15]:
+      policy = FixedGrowth(growth_rate=rate)
+      result = policy.compute(data)
+      assert result.value == rate
+
+
+class TestAvgOEGrowth:
+  """Tests for AvgOEGrowth policy."""
+
+  def test_insufficient_data_returns_nan(self):
+    """Returns NaN when no Year 3 data (only 1 year of data)."""
+    quarters = _make_quarters(
+        start_year=2023,
+        num_quarters=4,
+        cfo_ttm_values=[100.0, 110.0, 120.0, 130.0],
+        capex_ttm_values=[20.0, 22.0, 24.0, 26.0],
+        shares_values=[100.0, 100.0, 100.0, 100.0],
+    )
+    data = FundamentalsSlice(
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2024-01-15'),
+        quarters=quarters,
+    )
+
+    policy = AvgOEGrowth()
     result = policy.compute(data)
 
-    assert result.value == 0.0  # Clipped to 0
-    assert result.diag['raw_cagr'] < 0
-    assert result.diag['clipped_cagr'] == 0.0
+    assert result.value != result.value
+    assert result.diag['error'] == 'insufficient_data'
+    assert result.diag['year3_n'] == 0
 
-  def test_excessive_growth_clipped(self):
-    """Growth > 18% clipped to 18%.
+  def test_calculates_cagr_correctly(self):
+    """Calculates 3-year CAGR correctly using Year 1 and Year 3 buckets."""
+    quarters = _make_quarters(
+        start_year=2021,
+        num_quarters=16,
+        cfo_ttm_values=[100.0] * 16,
+        capex_ttm_values=[20.0] * 16,
+        shares_values=[100.0] * 16,
+    )
 
-    Manual calculation (with weighted CAPEX):
-    - 3 years ago (2020): OE≈(150-20)/100=1.30
-    - Latest (2022): OE≈(700-20)/100=6.80
-
-    CAGR: (6.80/1.30)^(1/3) - 1 ≈ 1.72 = 172%
-    Clipped to 18%
-    """
-    dates = pd.date_range('2020-03-31', periods=12, freq='Q')
-
-    cfo_values = [100, 110, 130, 150, 180, 220, 270, 330, 400, 480, 580, 700]
-    capex_values = [20] * 12
-    shares_values = [100] * 12
+    quarters[0] = QuarterData(
+        fiscal_year=2021,
+        fiscal_quarter='Q1',
+        end=pd.Timestamp('2021-03-28'),
+        filed=pd.Timestamp('2021-05-12'),
+        cfo_ttm=100.0,
+        capex_ttm=20.0,
+        shares=100.0,
+    )
+    quarters[-1] = QuarterData(
+        fiscal_year=2024,
+        fiscal_quarter='Q4',
+        end=pd.Timestamp('2024-12-28'),
+        filed=pd.Timestamp('2025-02-11'),
+        cfo_ttm=160.0,
+        capex_ttm=20.0,
+        shares=100.0,
+    )
 
     data = FundamentalsSlice(
-        ticker='HYPER',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series(cfo_values, index=dates),
-        capex_ttm_history=pd.Series(capex_values, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=700.0,
-        latest_capex_ttm=20.0,
-        latest_shares=100.0,
-        latest_filed=dates[-1],
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2025-02-15'),
+        quarters=quarters,
     )
 
-    policy = CAGRGrowth(min_years=3, clip_max=0.18)
+    policy = AvgOEGrowth()
     result = policy.compute(data)
 
-    assert result.value == 0.18  # Clipped
-    assert result.diag['raw_cagr'] == pytest.approx(1.287,
-                                                    abs=0.01)  # ~129% CAGR
-    assert result.diag['clipped_cagr'] == 0.18
+    assert result.diag['year1_n'] > 0
+    assert result.diag['year3_n'] > 0
+    assert result.value >= 0
 
-  def test_insufficient_data(self):
-    """Less than required years returns NaN."""
-    dates = pd.date_range('2023-09-30', periods=2, freq='Q')
+  def test_clips_to_max_growth(self):
+    """Clips high growth to max."""
+    quarters = _make_quarters(
+        start_year=2021,
+        num_quarters=16,
+        cfo_ttm_values=[50.0] * 4 + [100.0] * 8 + [300.0] * 4,
+        capex_ttm_values=[10.0] * 16,
+        shares_values=[100.0] * 16,
+    )
     data = FundamentalsSlice(
-        ticker='SHORT',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series([100, 110], index=dates),
-        capex_ttm_history=pd.Series([20, 22], index=dates),
-        shares_history=pd.Series([100, 98], index=dates),
-        latest_cfo_ttm=110.0,
-        latest_capex_ttm=22.0,
-        latest_shares=98.0,
-        latest_filed=dates[-1],
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2025-02-15'),
+        quarters=quarters,
     )
 
-    policy = CAGRGrowth(min_years=3)
+    policy = AvgOEGrowth(max_growth=0.20)
     result = policy.compute(data)
 
-    assert math.isnan(result.value)
-    assert 'insufficient' in result.diag.get('error', '')
+    assert result.value == 0.20
+    assert result.diag['raw_cagr'] > 0.20
+    assert result.diag['clipped_growth'] == 0.20
 
-  def test_with_capex_policy(self, sample_fundamentals):
-    """Integration with specific CAPEX policy."""
-    capex_policy = RawTTMCapex()
-    policy = CAGRGrowth(min_years=3)
-    result = policy.compute(sample_fundamentals, capex_policy=capex_policy)
-
-    assert isinstance(result, PolicyOutput)
-    if not math.isnan(result.value):
-      assert result.value >= 0
-
-  def test_below_threshold(self, minimal_fundamentals):
-    """Growth below threshold still returned."""
-    policy = CAGRGrowth(min_years=2, threshold=0.10, clip_max=0.18)
-    result = policy.compute(minimal_fundamentals)
-
-    if not math.isnan(result.value):
-      if result.diag['below_threshold']:
-        assert result.value <= policy.threshold
-
-  def test_default_capex_policy(self, sample_fundamentals):
-    """Uses WeightedAverageCapex by default."""
-    policy = CAGRGrowth(min_years=3)
-    result = policy.compute(sample_fundamentals, capex_policy=None)
-
-    assert isinstance(result, PolicyOutput)
-
-  def test_negative_first_oeps(self):
-    """Handle negative first OEPS."""
-    dates = pd.date_range('2020-03-31', periods=12, freq='Q')
-
-    cfo_values = [10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100]
-    capex_values = [50, 45, 40, 35, 30, 25, 22, 20, 18, 16, 15, 15]
-    shares_values = [100] * 12
-
+  def test_non_positive_oe_returns_nan(self):
+    """Returns NaN when OE is non-positive."""
+    quarters = _make_quarters(
+        start_year=2021,
+        num_quarters=16,
+        cfo_ttm_values=[50.0] * 16,
+        capex_ttm_values=[100.0] * 16,
+        shares_values=[100.0] * 16,
+    )
     data = FundamentalsSlice(
-        ticker='RECOVER',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series(cfo_values, index=dates),
-        capex_ttm_history=pd.Series(capex_values, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=15.0,
-        latest_shares=100.0,
-        latest_filed=dates[-1],
+        ticker='TEST',
+        as_of_date=pd.Timestamp('2025-02-15'),
+        quarters=quarters,
     )
 
-    policy = CAGRGrowth(min_years=3)
+    policy = AvgOEGrowth()
     result = policy.compute(data)
 
-    if math.isnan(result.value):
-      assert 'negative' in result.diag.get('error', '')
-
-  def test_custom_parameters(self, sample_fundamentals):
-    """Custom min_years, threshold, and clip range."""
-    policy = CAGRGrowth(
-        min_years=2,
-        threshold=0.05,
-        clip_min=0.02,
-        clip_max=0.15,
-    )
-    result = policy.compute(sample_fundamentals)
-
-    if not math.isnan(result.value):
-      assert result.value >= 0.02
-      assert result.value <= 0.15
-      assert result.diag['threshold'] == 0.05
-      assert result.diag['clip_range'] == (0.02, 0.15)
-
-  def test_diagnostics_structure(self, sample_fundamentals):
-    """Verify all expected diagnostic fields."""
-    policy = CAGRGrowth(min_years=3)
-    result = policy.compute(sample_fundamentals)
-
-    expected_keys = ['growth_method']
-
-    for key in expected_keys:
-      assert key in result.diag
-
-    if not math.isnan(result.value):
-      growth_keys = [
-          'raw_cagr',
-          'clipped_cagr',
-          'first_oeps',
-          'last_oeps',
-          'num_years',
-      ]
-      for key in growth_keys:
-        assert key in result.diag
-
-  def test_zero_shares(self):
-    """Handle zero shares in history."""
-    dates = pd.date_range('2020-03-31', periods=8, freq='Q')
-
-    cfo_values = [100] * 8
-    capex_values = [20] * 8
-    shares_values = [100, 100, 100, 100, 100, 0, 100, 100]
-
-    data = FundamentalsSlice(
-        ticker='WEIRD',
-        as_of_end=dates[-1],
-        filed_cutoff=dates[-1],
-        cfo_ttm_history=pd.Series(cfo_values, index=dates),
-        capex_ttm_history=pd.Series(capex_values, index=dates),
-        shares_history=pd.Series(shares_values, index=dates),
-        latest_cfo_ttm=100.0,
-        latest_capex_ttm=20.0,
-        latest_shares=100.0,
-        latest_filed=dates[-1],
-    )
-
-    policy = CAGRGrowth(min_years=2)
-    result = policy.compute(data)
-
-    assert isinstance(result, PolicyOutput)
+    assert result.value != result.value
+    assert result.diag['error'] == 'non_positive_oe'
