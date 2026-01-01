@@ -1,7 +1,7 @@
 """
 TTM (Trailing Twelve Months) correctness validator for Gold panels.
 
-Validates that TTM values equal the sum of last 4 quarterly values.
+Validates that TTM = sum of 4 quarters by fiscal_year/fiscal_quarter.
 """
 import pandas as pd
 
@@ -12,11 +12,10 @@ from data.shared.validation.base import pass_result
 
 class TTMCorrectnessValidator:
   """
-  Validate TTM = sum of last 4 quarters in Gold panels.
+  Validate TTM = sum of 4 quarters by fiscal_year/fiscal_quarter.
 
-  For each ticker, checks that cfo_ttm equals sum of last 4 cfo_q values.
-  Uses PIT logic: for each (ticker, end, filed), finds 4 most recent quarters
-  available at that filed date.
+  For each row, gets the 4 quarters ending at (fiscal_year, fiscal_quarter),
+  using only values filed <= current row's filed date (PIT).
   """
 
   def __init__(self, tolerance: float = 1e-6, sample_tickers: int = 10):
@@ -28,14 +27,15 @@ class TTMCorrectnessValidator:
     Validate TTM correctness by spot-checking sample tickers.
 
     Args:
-      df: Gold panel DataFrame with cfo_ttm, cfo_q columns
+      df: Gold panel DataFrame with cfo_ttm, cfo_q, fiscal_year, fiscal_quarter
       name: Check name for result
 
     Returns:
       CheckResult with pass/fail status
     """
-    if 'cfo_ttm' not in df.columns or 'cfo_q' not in df.columns:
-      return pass_result(name, 'No TTM/Q columns (skipped)')
+    required = ['cfo_ttm', 'cfo_q', 'fiscal_year', 'fiscal_quarter']
+    if not all(col in df.columns for col in required):
+      return pass_result(name, 'Missing required columns (skipped)')
 
     if 'ticker' not in df.columns:
       return pass_result(name, 'No ticker column (skipped)')
@@ -61,9 +61,24 @@ class TTMCorrectnessValidator:
 
     return pass_result(name, f'TTM spot check passed ({checked} rows)')
 
+  def _get_prior_quarters(self, fy: int, fq: str) -> list[tuple[int, str]]:
+    """Get the 4 quarters ending at (fy, fq)."""
+    quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+    q_idx = quarters.index(fq)
+
+    result = []
+    for i in range(4):
+      offset = q_idx - i
+      if offset >= 0:
+        result.append((fy, quarters[offset]))
+      else:
+        result.append((fy - 1, quarters[4 + offset]))
+
+    return result
+
   def _check_ticker(self, df: pd.DataFrame,
                     ticker: str) -> tuple[list[dict[str, object]], int]:
-    """Check TTM for a single ticker using PIT logic."""
+    """Check TTM for a single ticker using fiscal_year/fiscal_quarter logic."""
     ticker_df = df[df['ticker'] == ticker].copy()
     errors: list[dict[str, object]] = []
     checked = 0
@@ -72,46 +87,51 @@ class TTMCorrectnessValidator:
       return errors, checked
 
     has_filed = 'filed' in ticker_df.columns
+    ticker_df = ticker_df.sort_values(
+        ['fiscal_year', 'fiscal_quarter', 'filed']
+        if has_filed else ['fiscal_year', 'fiscal_quarter'])
 
-    if has_filed:
-      unique_ends = ticker_df.drop_duplicates(subset=['end'],
-                                              keep='last').sort_values('end')
-    else:
-      unique_ends = ticker_df.sort_values('end')
+    unique_quarters = ticker_df.drop_duplicates(
+        subset=['fiscal_year', 'fiscal_quarter'], keep='last')
 
-    if len(unique_ends) < 4:
-      return errors, checked
-
-    for i in range(3, len(unique_ends)):
-      row = unique_ends.iloc[i]
-
-      if has_filed:
-        filed = row['filed']
-        available = ticker_df[(ticker_df['filed'] <= filed)]
-        available = available.drop_duplicates(subset=['end'], keep='last')
-        available = available.sort_values('end')
-        recent_4 = available.tail(4)
-      else:
-        recent_4 = unique_ends.iloc[i - 3:i + 1]
-
-      if len(recent_4) < 4:
-        continue
-
-      q_vals = recent_4['cfo_q']
-      if q_vals.isna().any():
-        continue
-
+    for _, row in unique_quarters.iterrows():
+      fy = row['fiscal_year']
+      fq = row['fiscal_quarter']
+      filed = row['filed'] if has_filed else None
       ttm_val = row['cfo_ttm']
+
       if pd.isna(ttm_val):
         continue
 
-      q_sum = q_vals.sum()
+      target_quarters = self._get_prior_quarters(fy, fq)
+
+      q_vals = []
+      for t_fy, t_fq in target_quarters:
+        if has_filed:
+          candidates = ticker_df[(ticker_df['fiscal_year'] == t_fy) &
+                                 (ticker_df['fiscal_quarter'] == t_fq) &
+                                 (ticker_df['filed'] <= filed)]
+        else:
+          candidates = ticker_df[(ticker_df['fiscal_year'] == t_fy) &
+                                 (ticker_df['fiscal_quarter'] == t_fq)]
+
+        if not candidates.empty:
+          latest = candidates.sort_values('filed').iloc[-1] if has_filed \
+                   else candidates.iloc[-1]
+          q_val = latest['cfo_q']
+          if pd.notna(q_val):
+            q_vals.append(q_val)
+
+      if len(q_vals) != 4:
+        continue
+
+      q_sum = sum(q_vals)
       checked += 1
 
       if abs(q_sum - ttm_val) > self.tolerance:
         errors.append({
             'ticker': ticker,
-            'end': row['end'],
+            'fy_fq': f'{fy}{fq}',
             'q_sum': q_sum,
             'ttm_val': ttm_val,
             'diff': abs(q_sum - ttm_val)

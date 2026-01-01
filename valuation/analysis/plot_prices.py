@@ -218,11 +218,19 @@ def calculate_iv_for_date(
   oe0 = pre_maint_oe_result.value - maint_capex_result.value
 
   growth_result = policies['growth'].compute(fundamentals)
-  if pd.isna(growth_result.value):
-    return None
 
-  if growth_result.diag.get('below_threshold', False):
-    return None
+  if pd.isna(growth_result.value) or growth_result.diag.get(
+      'below_threshold', False):
+    return {
+        'iv': 0.0,
+        'growth': 0.0,
+        'oe0': oe0,
+        'shares': fundamentals.latest_shares,
+        'buyback': 0.0,
+        'market_price': None,
+        'pv_explicit': 0.0,
+        'terminal_value': 0.0,
+    }
 
   terminal_result = policies['terminal'].compute()
   g_terminal = terminal_result.value
@@ -249,26 +257,28 @@ def calculate_iv_for_date(
       discount_rate=discount_rate,
   )
 
-  if not pd.isna(iv) and iv > 0:
-    try:
-      market_slice = get_price_after_filing(ticker, fundamentals.latest_filed,
-                                            loader)
-      market_price = market_slice.price
-    except (FileNotFoundError, ValueError):
-      market_price = None
+  if pd.isna(iv):
+    return None
 
-    return {
-        'iv': iv,
-        'growth': growth_result.value,
-        'oe0': oe0,
-        'shares': sh0,
-        'buyback': buyback_rate,
-        'market_price': market_price,
-        'pv_explicit': pv_explicit,
-        'terminal_value': tv,
-    }
+  display_iv = max(0.0, iv)
 
-  return None
+  try:
+    market_slice = get_price_after_filing(ticker, fundamentals.latest_filed,
+                                          loader)
+    market_price = market_slice.price
+  except (FileNotFoundError, ValueError):
+    market_price = None
+
+  return {
+      'iv': display_iv,
+      'growth': growth_result.value,
+      'oe0': oe0,
+      'shares': sh0,
+      'buyback': buyback_rate,
+      'market_price': market_price,
+      'pv_explicit': pv_explicit,
+      'terminal_value': tv,
+  }
 
 
 def plot_scenario_comparison(
@@ -378,7 +388,7 @@ def plot_scenario_comparison(
           linewidth=2.5,
           markersize=7,
           color='red',
-          alpha=0.9)
+          alpha=1.0)
 
   ax.set_xlabel('Quarter End Date', fontsize=12, fontweight='bold')
   ax.set_ylabel('Price per Share ($)', fontsize=12, fontweight='bold')

@@ -157,16 +157,32 @@ class TTMCalculator:
   """
   Calculate TTM (Trailing Twelve Months) from quarterly values using PIT logic.
 
-  For each row, sums the 4 most recent quarterly values that were
-  filed before or on this row's filed date.
+  For each row, sums the 4 quarters by fiscal_year/fiscal_quarter,
+  using only values that were filed on or before the row's filed date.
   """
+
+  def _get_prior_quarters(self, fy: int, fq: str) -> list[tuple[int, str]]:
+    """Get the 4 quarters ending at (fy, fq)."""
+    quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+    q_idx = quarters.index(fq)
+
+    result = []
+    for i in range(4):
+      offset = q_idx - i
+      if offset >= 0:
+        result.append((fy, quarters[offset]))
+      else:
+        result.append((fy - 1, quarters[4 + offset]))
+
+    return result
 
   def calculate(self, quarterly: pd.DataFrame) -> pd.DataFrame:
     """
     Add TTM column to quarterly data.
 
     Args:
-      quarterly: DataFrame with columns [cik10, metric, end, filed, q_val, ...]
+      quarterly: DataFrame with columns [cik10, metric, end, filed,
+                 fiscal_year, fiscal_quarter, q_val, ...]
 
     Returns:
       Same DataFrame with 'ttm_val' column added
@@ -175,7 +191,8 @@ class TTMCalculator:
       return quarterly
 
     result = quarterly.copy()
-    result = result.sort_values(['cik10', 'metric', 'filed', 'end'])
+    result = result.sort_values(
+        ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'])
 
     ttm_values = []
 
@@ -183,17 +200,25 @@ class TTMCalculator:
       cik10 = row['cik10']
       metric = row['metric']
       filed = row['filed']
+      fy = row['fiscal_year']
+      fq = row['fiscal_quarter']
 
-      candidates = result[(result['cik10'] == cik10) &
-                          (result['metric'] == metric) &
-                          (result['filed'] <= filed)]
-      candidates = candidates.drop_duplicates(subset=['end'],
-                                              keep='last').sort_values('end')
+      target_quarters = self._get_prior_quarters(fy, fq)
 
-      recent_4 = candidates.tail(4)
+      q_vals = []
+      for t_fy, t_fq in target_quarters:
+        candidates = result[(result['cik10'] == cik10) &
+                            (result['metric'] == metric) &
+                            (result['fiscal_year'] == t_fy) &
+                            (result['fiscal_quarter'] == t_fq) &
+                            (result['filed'] <= filed)]
 
-      if len(recent_4) == 4:
-        ttm = recent_4['q_val'].sum()
+        if not candidates.empty:
+          latest = candidates.sort_values('filed').iloc[-1]
+          q_vals.append(latest['q_val'])
+
+      if len(q_vals) == 4 and all(pd.notna(v) for v in q_vals):
+        ttm = sum(q_vals)
       else:
         ttm = pd.NA
 
