@@ -257,12 +257,13 @@ from valuation.scenarios.config import ScenarioConfig
 
 config = ScenarioConfig(
     name='custom',
-    capex='weighted_3yr',     # or 'ttm', 'intensity_clipped'
-    growth='cagr',            # CAGR with 4% threshold, 0-18% clip
+    pre_maint_oe='avg_3y',    # or 'ttm' - CFO calculation method
+    maint_capex='avg_3y',     # or 'ttm' - CAPEX calculation method
+    growth='avg_oe_3y',       # or 'fixed_0p10', 'fixed_0p12', etc.
     fade='linear',            # Linear fade to terminal
-    shares='avg_change',      # 5yr average share change
-    terminal='perpetuity',    # Gordon growth at 3%
-    discount=0.10,            # 10% discount rate
+    shares='avg_5y',          # 5yr average share change
+    terminal='gordon',        # Gordon growth at 3% (or 'gordon_2pct')
+    discount='fixed_0p10',    # 10% discount rate
     n_years=10,               # 10-year explicit forecast
 )
 ```
