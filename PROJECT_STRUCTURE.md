@@ -1,6 +1,6 @@
 # Project Structure
 
-```
+```text
 valuation/
 │
 ├── README.md                 # Main project documentation
@@ -60,15 +60,17 @@ valuation/
 ## Key Entry Points
 
 ### Data Pipeline
+
 - **Ingest**: `python -m data.bronze.update --tickers AAPL GOOGL`
 - **Build Silver**: `python -m data.silver.build`
 - **Build Gold**: `python -m data.gold.build`
 - **Validate**: `python -m data.silver.validate`, `python -m data.gold.validate`
 
 ### Valuation
+
 - **Single**: `python -m valuation.run --ticker AAPL --as-of 2024-09-30`
-- **Batch**: `python -m valuation.analysis.batch_valuation --tickers-file tickers.txt --as-of-date 2024-09-30 --output results.csv`
-- **Sensitivity**: `python -m valuation.analysis.sensitivity --ticker AAPL --as-of-date 2024-09-30`
+- **Batch**: `python -m valuation.analysis.batch_valuation --tickers-file tickers.txt`
+- **Sensitivity**: `python -m valuation.analysis.sensitivity --ticker AAPL`
 - **CAPEX Compare**: `python -m valuation.analysis.compare_capex --tickers AAPL GOOGL`
 
 ## Documentation Map

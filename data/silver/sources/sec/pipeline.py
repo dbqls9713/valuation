@@ -60,17 +60,70 @@ class SECPipeline(Pipeline):
       self.datasets['metrics_quarterly'] = pd.DataFrame()
       return
 
+    # Infer FYE from data for companies without FYE info
+    companies = self._infer_fye(facts, companies)
+    self.datasets['companies'] = companies
+
     # Add fiscal year to all facts
     facts_with_fy = self.transformer.add_fiscal_year(facts, companies)
 
-    # All versions for PIT support
-    facts_all_versions = self.transformer.deduplicate(facts_with_fy,
-                                                      keep_all_versions=True)
+    # Add fiscal_quarter BEFORE deduplicate (needed for dedup key)
+    facts_with_fq = self._add_fiscal_quarter(facts_with_fy, companies)
+
+    # Deduplicate by (fiscal_year, fiscal_quarter, filed) for PIT support
+    facts_all_versions = self.transformer.deduplicate(facts_with_fq)
     self.datasets['facts_long'] = facts_all_versions
 
     # Build metrics from all versions
     metrics_q = self.metrics_builder.build(facts_all_versions)
+
+    # Add fiscal_quarter (metrics_q has end column from facts)
+    metrics_q = self._add_fiscal_quarter(metrics_q, companies)
+
+    # Drop original fp column (metrics_builder outputs fp as Q1/Q2/Q3/Q4)
+    if 'fp' in metrics_q.columns:
+      metrics_q = metrics_q.drop(columns=['fp'])
     self.datasets['metrics_quarterly'] = metrics_q
+
+  def _infer_fye(self, facts: pd.DataFrame,
+                 companies: pd.DataFrame) -> pd.DataFrame:
+    """Infer FYE from FY data's end date pattern for companies without FYE."""
+    companies = companies.copy()
+
+    # Get FY data end dates
+    fy_data = facts[facts['fp'] == 'FY'].copy()
+    if fy_data.empty:
+      return companies
+
+    fy_data['end_mmdd'] = fy_data['end'].dt.strftime('%m%d')
+
+    # Infer FYE as the most frequent end date pattern per company
+    inferred_fye = (fy_data.groupby('cik10')['end_mmdd'].agg(
+        lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else None).to_dict())
+
+    # Update companies with inferred FYE where fye_mmdd is None
+    def fill_fye(row: pd.Series) -> str:
+      if pd.notna(row['fye_mmdd']) and row['fye_mmdd']:
+        return str(row['fye_mmdd'])
+      return str(inferred_fye.get(row['cik10']) or '1231')
+
+    companies['fye_mmdd'] = companies.apply(  # type: ignore[arg-type]
+        fill_fye, axis=1)
+    return companies
+
+  def _add_fiscal_quarter(self, df: pd.DataFrame,
+                          companies: pd.DataFrame) -> pd.DataFrame:
+    """Add fiscal_quarter based on end date and FYE with ±7 day tolerance."""
+    from data.silver.shared.transforms import \
+        FiscalQuarterCalculator  # pylint: disable=import-outside-toplevel
+
+    df = df.copy()
+    fye_series = companies.set_index('cik10')['fye_mmdd']
+    fye_map: dict[str, str] = {str(k): str(v) for k, v in fye_series.items()}
+
+    calculator = FiscalQuarterCalculator()
+    df['fiscal_quarter'] = calculator.calculate(df, fye_map)
+    return df
 
   def validate(self) -> None:
     """Run validation checks."""

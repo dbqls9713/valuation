@@ -20,71 +20,44 @@ class SECFactsTransformer:
     result = self.fiscal_year_calc.calculate(facts, companies)
     return result  # type: ignore[no-any-return]
 
-  def deduplicate(self,
-                  df: pd.DataFrame,
-                  keep_all_versions: bool = False) -> pd.DataFrame:
+  def deduplicate(self, df: pd.DataFrame) -> pd.DataFrame:
     """
-    Keep only the latest filed value for each period, or all versions.
+    Deduplicate facts by (fiscal_year, fiscal_quarter, filed).
 
-    Args:
-        df: Input DataFrame
-        keep_all_versions: If True, keep all filed versions for PIT analysis.
-                          If False, keep only the latest filed version.
+    Keeps all filed versions for PIT (Point-in-Time) analysis.
+    When multiple records exist for the same key, keeps the highest
+    priority tag (as defined in METRIC_SPECS).
 
-    Uses fiscal_year for grouping when available.
-    Filters out comparative statements (fy != fiscal_year) to avoid mixing
-    different periods in downstream processing.
+    Requires 'fiscal_quarter' column to be present.
     """
     if df.empty:
       return df
 
-    if 'fiscal_year' not in df.columns:
-      group_cols = ['cik10', 'metric', 'end', 'fy', 'fp']
-      out = df.sort_values(group_cols + ['filed'])
-      out = out.groupby(group_cols, as_index=False).tail(1)
-      return out.reset_index(drop=True)
+    if 'fiscal_quarter' not in df.columns:
+      raise ValueError('fiscal_quarter column required for deduplicate')
 
-    if keep_all_versions:
-      # For PIT: keep all unique (end, fp, filed) combinations
-      # Don't filter by fy == fiscal_year to preserve historical restatements
-      # But filter out invalid data (fy=0 or empty fp)
-      valid = df[(df['fy'] > 0) & (df['fp'] != '')].copy()
-      # Remove exact duplicates but preserve different filing dates
-      return valid.drop_duplicates(
-          subset=['cik10', 'metric', 'end', 'fp',
-                  'filed'], keep='last').reset_index(drop=True)
+    # Filter out invalid data (fy=0 or empty fp)
+    valid = df[(df['fy'] > 0) & (df['fp'] != '')].copy()
 
-    # Filter out comparative statements: keep only fy == fiscal_year
-    df = df[df['fy'] == df['fiscal_year']].copy()
+    # When same (fiscal_year, fiscal_quarter, filed) has multiple records,
+    # keep highest priority tag and latest end date
+    tag_priority: dict[str, int] = {}
+    for spec in METRIC_SPECS.values():
+      tags: list[str] = spec['tags']  # type: ignore[assignment]
+      for idx, tag in enumerate(tags):
+        tag_priority[tag] = idx
 
-    # Original logic: keep only latest filed version
-    out_parts: list[pd.DataFrame] = []
+    valid['_tag_priority'] = valid['tag'].map(
+        lambda t: tag_priority.get(t, 999))
+    # Sort by tag priority (asc), then end date (desc)
+    valid = valid.sort_values(['_tag_priority', 'end'], ascending=[True, False])
 
-    for _, g in df.groupby(['cik10', 'metric', 'fiscal_year'], dropna=True):
-      # Since we filtered fy == fiscal_year, all records belong to this
-      # fiscal_year
-      for _, sub in g.groupby(['end', 'fp']):
-        quarterly_fps = {'Q1', 'Q2', 'Q3', 'Q4'}
-        has_quarterly = any(r['fp'] in quarterly_fps for _, r in sub.iterrows())
-        has_fy = any(r['fp'] == 'FY' for _, r in sub.iterrows())
+    # Deduplicate by (fiscal_year, fiscal_quarter, filed), keep best tag
+    dedup_cols = ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed']
+    valid = valid.drop_duplicates(subset=dedup_cols, keep='first')
 
-        if has_quarterly and has_fy:
-          sub = sub[sub['fp'].isin(quarterly_fps)]
-
-        if len(sub) > 1:
-          # Multiple filings for same period: keep latest
-          sub = sub.sort_values('filed', ascending=False).head(1)
-
-        out_parts.append(sub)
-
-    if not out_parts:
-      return pd.DataFrame(columns=df.columns)
-
-    non_empty = [p for p in out_parts if not p.empty]
-    if not non_empty:
-      return pd.DataFrame(columns=df.columns)
-
-    return pd.concat(non_empty, ignore_index=True).reset_index(drop=True)
+    valid = valid.drop(columns=['_tag_priority'])
+    return valid.reset_index(drop=True)
 
 
 class SECMetricsBuilder:

@@ -191,7 +191,7 @@ Examples:
 
   parser.add_argument('--gold-path',
                       type=Path,
-                      default=Path('data/gold/out/valuation_panel.parquet'),
+                      default=Path('data/gold/out/backtest_panel.parquet'),
                       help='Path to Gold panel')
 
   parser.add_argument('--silver-dir',

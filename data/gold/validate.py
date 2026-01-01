@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from data.gold.config.schemas import BACKTEST_PANEL_SCHEMA
 from data.gold.config.schemas import PanelSchema
 from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
 
@@ -28,12 +29,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True)
 class CheckResult:
   """Result of a single validation check."""
   name: str
   ok: bool
   details: str
+
 
 def validate_panel(
     df: pd.DataFrame,
@@ -105,13 +108,19 @@ def validate_panel(
 
   return results
 
-def _validate_valuation_panel(gold_dir: Path) -> list[CheckResult]:
-  """Validate valuation_panel.parquet."""
-  path = gold_dir / 'valuation_panel.parquet'
+
+def _validate_panel_file(
+    gold_dir: Path,
+    schema: PanelSchema,
+) -> list[CheckResult]:
+  """Validate a panel parquet file against its schema."""
+  path = gold_dir / f'{schema.name}.parquet'
+  panel_name = schema.name
+
   if not path.exists():
     return [
         CheckResult(
-            name='valuation_panel_exists',
+            name=f'{panel_name}_exists',
             ok=False,
             details=f'File not found: {path}',
         )
@@ -120,19 +129,19 @@ def _validate_valuation_panel(gold_dir: Path) -> list[CheckResult]:
   df = pd.read_parquet(path)
   results = [
       CheckResult(
-          name='valuation_panel_exists',
+          name=f'{panel_name}_exists',
           ok=True,
           details=f'Shape: {df.shape}',
       )
   ]
 
-  results.extend(validate_panel(df, VALUATION_PANEL_SCHEMA))
+  results.extend(validate_panel(df, schema))
 
   if 'end' in df.columns and 'filed' in df.columns:
     invalid = (df['filed'] < df['end']).sum()
     results.append(
         CheckResult(
-            name='valuation_panel_filed_ge_end',
+            name=f'{panel_name}_filed_ge_end',
             ok=invalid == 0,
             details=f'Rows with filed < end: {invalid}',
         ))
@@ -143,12 +152,13 @@ def _validate_valuation_panel(gold_dir: Path) -> list[CheckResult]:
     pct = oe_positive / total * 100 if total > 0 else 0
     results.append(
         CheckResult(
-            name='valuation_panel_oe_positive',
+            name=f'{panel_name}_oe_positive',
             ok=True,
             details=f'OE positive: {oe_positive}/{total} ({pct:.1f}%)',
         ))
 
   return results
+
 
 def main() -> None:
   """CLI entrypoint."""
@@ -164,7 +174,9 @@ def main() -> None:
   logger.info('Validating Gold layer: %s', args.gold_dir)
 
   all_results: list[CheckResult] = []
-  all_results.extend(_validate_valuation_panel(args.gold_dir))
+  all_results.extend(_validate_panel_file(args.gold_dir,
+                                          VALUATION_PANEL_SCHEMA))
+  all_results.extend(_validate_panel_file(args.gold_dir, BACKTEST_PANEL_SCHEMA))
 
   passed = sum(1 for r in all_results if r.ok)
   failed = sum(1 for r in all_results if not r.ok)
@@ -181,6 +193,7 @@ def main() -> None:
 
   if failed > 0:
     raise SystemExit(1)
+
 
 if __name__ == '__main__':
   main()

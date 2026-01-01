@@ -98,7 +98,8 @@ def _assert_filed_ge_end(df: pd.DataFrame, name: str) -> CheckResult:
   bad = df['filed'] < df['end']
   if bad.any():
     n = int(bad.sum())
-    cols = ['cik10', 'metric', 'end', 'filed', 'fp']
+    cols = ['cik10', 'metric', 'end', 'filed', 'fiscal_quarter']
+    cols = [c for c in cols if c in df.columns]
     sample = df.loc[bad, cols].head(5).to_dict(orient='records')
     return CheckResult(name, False,
                        f'{n} rows have filed < end. Sample: {sample}')
@@ -113,8 +114,8 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
   Only compares data from original filings (fy == fiscal_year) to avoid
   mixing comparative disclosures which may have different values.
 
-  We expect facts_long to contain fp in {Q1,Q2,Q3,FY} for cashflow YTD.
-  metrics_quarterly contains fp in {Q1,Q2,Q3,Q4}.
+  We expect facts_long to contain quarter in {Q1,Q2,Q3,Q4}.
+  metrics_quarterly contains quarter in {Q1,Q2,Q3,Q4}.
   """
   if ('fiscal_year' not in facts.columns or
       'fiscal_year' not in metrics_q.columns):
@@ -130,11 +131,16 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
   if 'fy' in metrics_q.columns:
     metrics_q = metrics_q[metrics_q['fy'] == metrics_q['fiscal_year']].copy()
 
-  f = facts[['cik10', 'metric', 'end', 'fiscal_year', 'fp', 'val']].copy()
-  m = metrics_q[['cik10', 'metric', 'end', 'fiscal_year', 'fp', 'q_val']].copy()
+  # Use quarter column (Q1-Q4), also keep fp for YTD logic
+  f = facts[[
+      'cik10', 'metric', 'end', 'fiscal_year', 'fiscal_quarter', 'fp', 'val'
+  ]].copy()
+  m = metrics_q[[
+      'cik10', 'metric', 'end', 'fiscal_year', 'fiscal_quarter', 'q_val'
+  ]].copy()
 
-  f['fp'] = f['fp'].astype(str)
-  m['fp'] = m['fp'].astype(str)
+  f['fiscal_quarter'] = f['fiscal_quarter'].astype(str)
+  m['fiscal_quarter'] = m['fiscal_quarter'].astype(str)
 
   ytd_metrics = [m for m, s in METRIC_SPECS.items() if s.get('is_ytd', False)]
   f_ytd = f[f['metric'].isin(ytd_metrics)].copy()
@@ -145,12 +151,12 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
                 'val'] = f_ytd.loc[f_ytd['metric'] == metric, 'val'].abs()
 
   mq = m.copy()
-  mq = mq[mq['fp'].isin(['Q1', 'Q2', 'Q3', 'Q4'])]
+  mq = mq[mq['fiscal_quarter'].isin(['Q1', 'Q2', 'Q3', 'Q4'])]
 
   pivot = (
       mq.pivot_table(
           index=['cik10', 'metric', 'fiscal_year'],
-          columns='fp',
+          columns='fiscal_quarter',
           values='q_val',
           aggfunc='last'  # type: ignore[arg-type]
       ).reset_index())
@@ -464,21 +470,24 @@ def main() -> None:
 
   # --- SEC tables ---
   _require_columns(facts, [
-      'cik10', 'metric', 'namespace', 'tag', 'unit', 'end', 'filed', 'fy', 'fp',
-      'form', 'val'
+      'cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed', 'end', 'fy',
+      'fp', 'namespace', 'tag', 'unit', 'form', 'val'
   ], 'facts_long')
   _require_columns(metrics_q, [
-      'cik10', 'metric', 'end', 'filed', 'fy', 'fp', 'q_val', 'ttm_val', 'tag'
+      'cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed', 'end', 'fy',
+      'q_val', 'ttm_val', 'tag'
   ], 'metrics_quarterly')
 
-  # facts_long includes all filed versions (PIT support)
+  # Primary key: ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed']
   results.append(
-      _assert_unique(facts, ['cik10', 'metric', 'end', 'fy', 'fp', 'filed'],
-                     'facts_unique_period'))
-  # metrics_quarterly includes all filed versions (PIT support)
+      _assert_unique(
+          facts, ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'],
+          'facts_unique_period'))
   results.append(
-      _assert_unique(metrics_q, ['cik10', 'metric', 'end', 'fp', 'filed'],
-                     'metrics_unique_period'))
+      _assert_unique(
+          metrics_q,
+          ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'],
+          'metrics_unique_period'))
   results.append(_assert_filed_ge_end(facts, 'facts_filed_ge_end'))
   results.append(_assert_filed_ge_end(metrics_q, 'metrics_filed_ge_end'))
 

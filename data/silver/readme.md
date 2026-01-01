@@ -1,10 +1,11 @@
 # Silver Layer: Data Normalization and Transformation
 
-Clean, normalized, analysis-ready tables with extensible and maintainable structure.
+Clean, normalized, analysis-ready tables with extensible and maintainable
+structure.
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
-```
+```text
 data/silver/
 ├── core/                    # Core abstractions
 │   ├── pipeline.py          # Pipeline abstract class
@@ -31,7 +32,9 @@ data/silver/
 │
 └── build.py                # CLI entry point
 ```
+
 ### Run validation
+
 ```bash
 # Basic validation
 python -m data.silver.validate
@@ -43,30 +46,35 @@ python -m data.silver.validate --silver-dir data/silver_out
 python -m data.silver.validate --with-manual
 ```
 
-## 📊 Output Files
+## Output Files
 
 ### `sec/companies.parquet`
+
 - Columns: `ticker`, `cik10`, `title`, `fye_mmdd`
 - Fiscal year end from SEC submissions API
 
 ### `sec/facts_long.parquet`
+
 - Minimal facts filtered by `metric_specs.py`
-- Columns: `cik10`, `metric`, `end`, `filed`, `fy`, `fp`, `val`, `fiscal_year`, etc.
-- One row per (cik10, metric, end, fy, fp) after deduplication
+- Columns: `cik10`, `metric`, `end`, `filed`, `fy`, `fp`, `val`, etc.
+- One row per (cik10, metric, fiscal_year, fiscal_quarter, filed)
 - `fiscal_year`: calculated from company FYE (not SEC's `fy`)
 - CAPEX stored as absolute values
 
 ### `sec/metrics_quarterly.parquet`
+
 - Quarterly discrete (`q_val`) and TTM (`ttm_val`) values
 - YTD metrics (CFO, CAPEX) converted to discrete via differencing
 - Q4 derived as: FY - Q3
 
 ### `stooq/prices_daily.parquet`
+
 - Daily OHLCV: `symbol`, `date`, `open`, `high`, `low`, `close`, `volume`
 
-## 🎯 Key Improvements
+## Key Improvements
 
 ### 1. Clear Separation of Concerns
+
 - **Pipeline**: Orchestrates entire ETL flow
 - **Extractor**: Bronze → DataFrame conversion
 - **Transformer**: Data normalization and transformation
@@ -74,7 +82,9 @@ python -m data.silver.validate --with-manual
 - **Writer**: Parquet storage + metadata
 
 ### 2. Extensibility
+
 Add new data sources by:
+
 ```python
 from data.silver.core.pipeline import Pipeline
 
@@ -86,7 +96,9 @@ class NewSourcePipeline(Pipeline):
 ```
 
 ### 3. Testability
+
 Each component can be tested independently:
+
 ```python
 extractor = SECCompanyFactsExtractor()
 df = extractor.extract_companies(path, submissions)
@@ -94,19 +106,21 @@ assert len(df) > 0
 ```
 
 ### 4. Error Handling
+
 - Per-file error isolation
 - Detailed error messages
 - Partial failure tolerance
 
 ### 5. Logging & Monitoring
-```
+
+```text
 2025-12-30 08:32:22 - INFO - Running sec pipeline...
 2025-12-30 08:32:22 - INFO - ✓ sec pipeline completed
 2025-12-30 08:32:22 - INFO -   companies: (10507, 4)
 2025-12-30 08:32:22 - INFO -   facts_long: (1043, 12)
 ```
 
-## 📈 Data Quality Comparison
+## Data Quality Comparison
 
 | Dataset | Old | New | Improvement |
 |---------|-----|-----|-------------|
@@ -117,9 +131,10 @@ assert len(df) > 0
 
 **New architecture extracts more data!**
 
-## 🔧 Deduplication Strategy
+## Deduplication Strategy
 
-SEC data contains duplicates from restatements, comparative periods, multiple values per period, and mixed FY/Q labels.
+SEC data contains duplicates from restatements, comparative periods,
+multiple values per period, and mixed FY/Q labels.
 
 **4-step process in `dedup_latest_filed()`:**
 
@@ -132,14 +147,15 @@ SEC data contains duplicates from restatements, comparative periods, multiple va
 
 Result: Consistent fiscal year data with correct YTD→Quarter conversion.
 
-## ⚠️ Critical Notes
+## Critical Notes
 
 ### Look-Ahead Bias Warning
 
 **Current implementation uses LATEST FILED VERSION.**
 
 Example:
-```
+
+```text
 Q1 2020 originally filed 2020-04-30: $100M
 Later restated in 2021-07-30: $110M
 
@@ -148,6 +164,7 @@ Current data: end=2020-03-31, filed=2021-07-30, val=$110M
 ```
 
 **For true point-in-time:**
+
 - Keep all versions in facts_long
 - Filter by `filed <= backtest_date` at query time
 - Then deduplicate
@@ -157,6 +174,7 @@ Current data: end=2020-03-31, filed=2021-07-30, val=$110M
 ### YTD vs Discrete
 
 Cash flow metrics are YTD cumulative in SEC filings:
+
 ```python
 Q1_discrete = Q1_ytd
 Q2_discrete = Q2_ytd - Q1_ytd
@@ -164,7 +182,8 @@ Q3_discrete = Q3_ytd - Q2_ytd
 Q4_discrete = FY_ytd - Q3_ytd
 ```
 
-**Critical:** All YTD values must be from same filing version (ensured by deduplication).
+**Critical:** All YTD values must be from same filing version (ensured by
+deduplication).
 
 ### Fiscal Year Calculation
 
@@ -175,11 +194,13 @@ else:
     fiscal_year = end.year + 1
 ```
 
-Assumes FYE doesn't change. If company changes FYE, historical assignments may be incorrect.
+Assumes FYE doesn't change. If company changes FYE, historical assignments
+may be incorrect.
 
-## 🔧 Extension Examples
+## Extension Examples
 
 ### Add new metric
+
 ```python
 # config/metric_specs.py
 METRIC_SPECS = {
@@ -194,6 +215,7 @@ METRIC_SPECS = {
 ```
 
 ### Add custom validator
+
 ```python
 # shared/validators.py
 class CustomValidator(Validator):

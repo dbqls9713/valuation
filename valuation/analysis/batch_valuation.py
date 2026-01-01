@@ -76,7 +76,7 @@ def batch_valuation(
     tickers: Sequence[str],
     as_of_date: str,
     config: ScenarioConfig,
-    gold_path: Path = Path('data/gold/out/valuation_panel.parquet'),
+    gold_path: Path = Path('data/gold/out/backtest_panel.parquet'),
     silver_dir: Path = Path('data/silver/out'),
     verbose: bool = False,
 ) -> pd.DataFrame:
@@ -240,7 +240,7 @@ def main() -> None:
 
   parser.add_argument('--gold-path',
                       type=Path,
-                      default=Path('data/gold/out/valuation_panel.parquet'),
+                      default=Path('data/gold/out/backtest_panel.parquet'),
                       help='Path to Gold panel parquet')
 
   parser.add_argument('--silver-dir',

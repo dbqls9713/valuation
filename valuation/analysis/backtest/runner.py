@@ -53,7 +53,7 @@ class BacktestRunner:
       start_date: str,
       end_date: str,
       scenarios: Optional[list[ScenarioConfig]] = None,
-      gold_path: Path = Path('data/gold/out/valuation_panel.parquet'),
+      gold_path: Path = Path('data/gold/out/backtest_panel.parquet'),
       silver_dir: Path = Path('data/silver/out'),
   ):
     """
@@ -177,7 +177,7 @@ def run_batch_backtest(
     start_date: str,
     end_date: str,
     scenarios: list[ScenarioConfig],
-    gold_path: Path = Path('data/gold/out/valuation_panel.parquet'),
+    gold_path: Path = Path('data/gold/out/backtest_panel.parquet'),
     silver_dir: Path = Path('data/silver/out'),
     verbose: bool = True,
 ) -> pd.DataFrame:
@@ -253,7 +253,7 @@ def main():
   parser.add_argument(
       '--gold-path',
       type=Path,
-      default=Path('data/gold/out/valuation_panel.parquet'),
+      default=Path('data/gold/out/backtest_panel.parquet'),
   )
   parser.add_argument('--silver-dir',
                       type=Path,

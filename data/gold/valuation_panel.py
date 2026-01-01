@@ -43,7 +43,7 @@ def build_valuation_panel(
       gold_dir=gold_dir,
       min_date=min_date,
   )
-  panel = builder.build()
+  result: pd.DataFrame = builder.build()
   builder.save()
 
-  return panel
+  return result
