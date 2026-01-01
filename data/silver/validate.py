@@ -225,31 +225,74 @@ def _check_ytd_identity(facts: pd.DataFrame, metrics_q: pd.DataFrame,
 
 
 def _check_ttm(metrics_q: pd.DataFrame, tol: float) -> CheckResult:
-  m = metrics_q.sort_values(['cik10', 'metric', 'end']).copy()
-  rolling_result = (m.groupby(
-      ['cik10', 'metric'])['q_val'].rolling(4).sum().reset_index(level=[0, 1],
-                                                                 drop=True))
-  m['ttm_recomputed'] = rolling_result
+  """
+  Check TTM correctness using PIT logic.
 
-  comp = m[pd.notna(m['ttm_val']) & pd.notna(m['ttm_recomputed'])].copy()
-  if comp.empty:
-    return CheckResult('ttm_check', False,
-                       'No comparable TTM rows found (need >=4 quarters).')
+  For PIT-based TTM, each row's ttm_val is computed from the 4 most recent
+  quarters available at that row's filed date (not simple rolling by end).
 
-  comp['diff'] = (comp['ttm_val'] - comp['ttm_recomputed']).abs()
-  bad = comp['diff'] > tol
-  if bad.any():
-    n = int(bad.sum())
-    sample = comp.loc[
-        bad,
-        ['cik10', 'metric', 'end', 'ttm_val', 'ttm_recomputed', 'diff']].head(
-            10)
+  This check validates that ttm_val matches a PIT-based recomputation.
+  """
+  m = metrics_q.copy()
+
+  # For PIT TTM validation, we need to check each row individually
+  # TTM should be sum of 4 most recent quarters where filed <= current filed
+  errors = []
+
+  for cik in m['cik10'].unique():
+    cik_data = m[m['cik10'] == cik].copy()
+
+    for metric in cik_data['metric'].unique():
+      metric_data = cik_data[cik_data['metric'] == metric].copy()
+      metric_data = metric_data.sort_values(['filed', 'end'])
+
+      for _, row in metric_data.iterrows():
+        if pd.isna(row['ttm_val']):
+          continue
+
+        filed = row['filed']
+
+        # Find 4 most recent quarters available at this filed date
+        available = metric_data[metric_data['filed'] <= filed]
+        available = available.drop_duplicates(subset=['end'], keep='last')
+        available = available.sort_values('end')
+        recent_4 = available.tail(4)
+
+        if len(recent_4) < 4:
+          continue
+
+        ttm_recomputed = recent_4['q_val'].sum()
+        diff = abs(row['ttm_val'] - ttm_recomputed)
+
+        if diff > tol:
+          errors.append({
+              'cik10': cik,
+              'metric': metric,
+              'end': row['end'],
+              'ttm_val': row['ttm_val'],
+              'ttm_recomputed': ttm_recomputed,
+              'diff': diff
+          })
+
+        if len(errors) >= 100:
+          break
+      if len(errors) >= 100:
+        break
+    if len(errors) >= 100:
+      break
+
+  total_with_ttm = m['ttm_val'].notna().sum()
+
+  if errors:
+    sample_df = pd.DataFrame(errors[:10])
     return CheckResult(
-        'ttm_check', False, f'{n}/{len(comp)} rows fail TTM check (tol={tol}). '
-        f'Sample:\n{sample.to_string(index=False)}')
+        'ttm_check', False,
+        f'{len(errors)}+ rows fail TTM check (tol={tol}, sampled first 100). '
+        f'Sample:\n{sample_df.to_string(index=False)}')
+
   return CheckResult(
-      'ttm_check', True, f'All comparable rows pass TTM check (tol={tol}). '
-      f'Compared rows={len(comp)}')
+      'ttm_check', True, f'TTM values pass PIT-based check (tol={tol}). '
+      f'Total rows with TTM={total_with_ttm}')
 
 
 def _check_capex_abs(metrics_q: pd.DataFrame, eps: float) -> CheckResult:

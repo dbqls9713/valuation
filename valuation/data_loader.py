@@ -63,9 +63,8 @@ class ValuationDataLoader:
       return self._panel
 
     if not self.gold_path.exists():
-      raise FileNotFoundError(
-          f'Gold panel not found: {self.gold_path}. '
-          'Run "python -m data.gold.build" first.')
+      raise FileNotFoundError(f'Gold panel not found: {self.gold_path}. '
+                              'Run "python -m data.gold.build" first.')
 
     panel = pd.read_parquet(self.gold_path)
     panel['end'] = pd.to_datetime(panel['end'])
@@ -110,8 +109,10 @@ class ValuationDataLoader:
     """
     Adjust shares for stock splits across all tickers.
 
-    Must be applied before PIT filtering to ensure historical shares
-    are on the same basis as current prices.
+    Uses only original filings (fy == fiscal_year) to detect splits.
+    Only adjusts rows filed BEFORE the split to avoid double-adjustment
+    from SEC comparative disclosures that already have retroactively
+    adjusted share counts.
 
     Args:
       panel: Raw Gold panel data
@@ -123,7 +124,6 @@ class ValuationDataLoader:
 
     for ticker in panel['ticker'].unique():
       ticker_data = panel[panel['ticker'] == ticker].copy()
-      ticker_data = ticker_data.sort_values('end')
 
       shares_missing = ('shares_q' not in ticker_data.columns or
                         ticker_data['shares_q'].isna().all())
@@ -131,24 +131,40 @@ class ValuationDataLoader:
         adjusted_parts.append(ticker_data)
         continue
 
-      ticker_data['shares_ratio'] = (ticker_data['shares_q'] /
-                                     ticker_data['shares_q'].shift(1))
+      has_fy_cols = ('fy' in ticker_data.columns and
+                     'fiscal_year' in ticker_data.columns)
+      if has_fy_cols:
+        original_only = ticker_data[ticker_data['fy'] ==
+                                    ticker_data['fiscal_year']]
+      else:
+        original_only = ticker_data.drop_duplicates('end', keep='first')
 
-      splits = ticker_data[(ticker_data['shares_ratio'] > 2) |
-                           (ticker_data['shares_ratio'] < 0.5)].copy()
+      original_only = original_only.sort_values('end')
 
-      if not splits.empty:
-        for idx in splits.index[::-1]:
-          split_date = ticker_data.loc[idx, 'end']
-          split_ratio = ticker_data.loc[idx, 'shares_ratio']
+      if len(original_only) < 2:
+        adjusted_parts.append(ticker_data)
+        continue
 
-          mask = ticker_data['end'] < split_date
-          ticker_data.loc[mask, 'shares_q'] *= split_ratio
+      original_only = original_only.copy()
+      original_only['shares_ratio'] = (original_only['shares_q'] /
+                                       original_only['shares_q'].shift(1))
 
-          ticker_data['shares_ratio'] = (ticker_data['shares_q'] /
-                                         ticker_data['shares_q'].shift(1))
+      splits = original_only[(original_only['shares_ratio'] > 2) |
+                             (original_only['shares_ratio'] < 0.5)].copy()
 
-      ticker_data = ticker_data.drop(columns=['shares_ratio'])
+      if splits.empty:
+        adjusted_parts.append(ticker_data)
+        continue
+
+      for _, split_row in splits.iloc[::-1].iterrows():
+        split_date = split_row['end']
+        split_filed = split_row['filed']
+        split_ratio = split_row['shares_ratio']
+
+        mask = ((ticker_data['end'] < split_date) &
+                (ticker_data['filed'] < split_filed))
+        ticker_data.loc[mask, 'shares_q'] *= split_ratio
+
       adjusted_parts.append(ticker_data)
 
     result: pd.DataFrame = pd.concat(adjusted_parts, ignore_index=True)

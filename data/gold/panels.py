@@ -142,9 +142,8 @@ class BacktestPanelBuilder(_BasePanelBuilder):
     metrics_wide = self._build_wide_metrics(metrics_q)
     metrics_wide = self._filter_complete_rows(metrics_wide)
 
-    # Normalize shares to latest filed version per (cik10, end)
-    # This ensures consistency with split-adjusted prices
-    metrics_wide = self._normalize_shares(metrics_wide)
+    # Note: Shares are NOT normalized here to preserve PIT consistency.
+    # Split adjustment is handled by ValuationDataLoader._adjust_for_splits
 
     metrics_wide = metrics_wide.merge(
         companies[['cik10', 'ticker']],
@@ -163,28 +162,6 @@ class BacktestPanelBuilder(_BasePanelBuilder):
     self.panel = panel.sort_values(['ticker', 'end',
                                     'filed']).reset_index(drop=True)
     return self.panel
-
-  def _normalize_shares(self, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Normalize shares_q to latest filed version for each (cik10, end).
-
-    When restatements occur (e.g., after stock splits), older filed versions
-    may have pre-split share counts while prices are split-adjusted. This
-    normalizes all shares to the most recent (post-restatement) values.
-    """
-    df = df.copy()
-
-    # Get latest shares for each (cik10, end)
-    latest = df.sort_values('filed').groupby(['cik10', 'end']).tail(1)
-    latest_shares = latest.set_index(['cik10', 'end'])['shares_q']
-
-    # Apply to all rows
-    df['shares_q'] = df.apply(
-        lambda r: latest_shares.get((r['cik10'], r['end']), r['shares_q']),
-        axis=1,
-    )
-
-    return df
 
 
 class ValuationPanelBuilder(_BasePanelBuilder):
