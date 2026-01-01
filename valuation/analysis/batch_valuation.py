@@ -269,19 +269,11 @@ def main() -> None:
     logger.info('Loaded %d tickers from %s', len(tickers), args.tickers_file)
     logger.info('Processing as of %s', args.as_of_date)
 
-  scenario_map = {
-      'default': ScenarioConfig.default,
-      'raw_capex': ScenarioConfig.raw_capex,
-      'clipped_capex': ScenarioConfig.clipped_capex,
-      'discount_6pct': ScenarioConfig.discount_6pct,
-  }
-
-  if args.scenario not in scenario_map:
-    available = ', '.join(scenario_map.keys())
+  if args.scenario == 'default':
+    config = ScenarioConfig.default()
+  else:
     raise ValueError(
-        f'Unknown scenario: {args.scenario}. Available: {available}')
-
-  config = scenario_map[args.scenario]()
+        f'Unknown scenario: {args.scenario}. Available: default')
   logger.info('Using scenario: %s', config.name)
   logger.info('')
 

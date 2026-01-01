@@ -2,14 +2,14 @@ import pandas as pd
 
 from valuation.domain.types import FundamentalsSlice
 from valuation.domain.types import PolicyOutput
-from valuation.policies.growth import FixedGrowth
+from valuation.policies.maintenance_capex import TTMCapex
 
 
-class TestFixedGrowth:
-  """Tests for FixedGrowth policy."""
+class TestTTMCapex:
+  """Tests for TTMCapex policy."""
 
-  def test_returns_fixed_rate(self):
-    """Returns the configured fixed growth rate."""
+  def test_returns_absolute_value(self):
+    """Returns absolute value of latest CAPEX."""
     dates = pd.date_range('2022-12-31', periods=4, freq='Q')
     data = FundamentalsSlice(
         ticker='TEST',
@@ -24,31 +24,32 @@ class TestFixedGrowth:
         latest_filed=dates[-1],
     )
 
-    policy = FixedGrowth(growth_rate=0.10)
+    policy = TTMCapex()
     result = policy.compute(data)
 
     assert isinstance(result, PolicyOutput)
-    assert result.value == 0.10
-    assert result.diag['growth_method'] == 'fixed'
-    assert result.diag['growth_rate'] == 0.10
+    assert result.value == 26.0
+    assert result.diag['maint_capex_method'] == 'ttm'
+    assert result.diag['maint_capex'] == 26.0
 
-  def test_different_rates(self):
-    """Different fixed rates work correctly."""
+  def test_negative_capex_converted_to_positive(self):
+    """Handles negative CAPEX values."""
     dates = pd.date_range('2022-12-31', periods=4, freq='Q')
     data = FundamentalsSlice(
         ticker='TEST',
         as_of_end=dates[-1],
         filed_cutoff=dates[-1],
         cfo_ttm_history=pd.Series([100, 110, 120, 130], index=dates),
-        capex_ttm_history=pd.Series([20, 22, 24, 26], index=dates),
+        capex_ttm_history=pd.Series([-20, -22, -24, -26], index=dates),
         shares_history=pd.Series([100, 100, 100, 100], index=dates),
         latest_cfo_ttm=130.0,
-        latest_capex_ttm=26.0,
+        latest_capex_ttm=-26.0,
         latest_shares=100.0,
         latest_filed=dates[-1],
     )
 
-    for rate in [0.05, 0.08, 0.12, 0.15]:
-      policy = FixedGrowth(growth_rate=rate)
-      result = policy.compute(data)
-      assert result.value == rate
+    policy = TTMCapex()
+    result = policy.compute(data)
+
+    assert result.value == 26.0
+    assert result.diag['capex_ttm'] == -26.0

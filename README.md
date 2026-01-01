@@ -214,7 +214,7 @@ from valuation.scenarios.config import ScenarioConfig
 
 config = ScenarioConfig(
     name='custom',
-    capex='weighted_3yr',     # or 'raw_ttm', 'intensity_clipped'
+    capex='weighted_3yr',     # or 'ttm', 'intensity_clipped'
     growth='cagr',            # CAGR with 4% threshold, 0-18% clip
     fade='linear',            # Linear fade to terminal
     shares='avg_change',      # 5yr average share change

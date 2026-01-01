@@ -41,12 +41,14 @@ class FundamentalsSlice:
     as_of_end: Quarter end date for valuation
     filed_cutoff: PIT cutoff date (only data filed before this is used)
     cfo_ttm_history: Series of TTM CFO values indexed by quarter end date
-    capex_ttm_history: Series of TTM CAPEX values indexed by quarter end date
+    capex_ttm_history: Series of TTM CAPEX indexed by quarter end date
     shares_history: Series of shares count indexed by quarter end date
     latest_cfo_ttm: Most recent TTM CFO value
     latest_capex_ttm: Most recent TTM CAPEX value
     latest_shares: Most recent shares count
     latest_filed: Filing date of the most recent data
+    cfo_q_history: Optional series of quarterly CFO (for OE policies)
+    capex_q_history: Optional series of quarterly CAPEX (for OE policies)
   """
   ticker: str
   as_of_end: pd.Timestamp
@@ -58,6 +60,10 @@ class FundamentalsSlice:
   latest_capex_ttm: float
   latest_shares: float
   latest_filed: pd.Timestamp
+  cfo_q_history: pd.Series = field(
+      default_factory=lambda: pd.Series(dtype=float))
+  capex_q_history: pd.Series = field(
+      default_factory=lambda: pd.Series(dtype=float))
 
   @classmethod
   def from_panel(cls, panel: pd.DataFrame, ticker: str,
@@ -108,7 +114,13 @@ class FundamentalsSlice:
         as_of_end=latest['end'],
         filed_cutoff=as_of_date,
         cfo_ttm_history=pit_data.set_index('end')['cfo_ttm'],
+        cfo_q_history=(pit_data.set_index('end')['cfo_q']
+                       if 'cfo_q' in pit_data.columns else pd.Series(
+                           dtype=float)),
         capex_ttm_history=pit_data.set_index('end')['capex_ttm'],
+        capex_q_history=(pit_data.set_index('end')['capex_q']
+                         if 'capex_q' in pit_data.columns else pd.Series(
+                             dtype=float)),
         shares_history=pit_data.set_index('end')['shares_q'],
         latest_cfo_ttm=float(latest['cfo_ttm']),
         latest_capex_ttm=float(latest['capex_ttm']),

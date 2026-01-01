@@ -1,5 +1,7 @@
 """
 SEC data processing pipeline.
+
+Silver layer: Normalization only (no YTD->Q or TTM calculations).
 """
 from pathlib import Path
 
@@ -11,7 +13,6 @@ from data.silver.core.pipeline import PipelineContext
 from data.silver.shared.validators import BasicValidator
 from data.silver.sources.sec.extractors import SECCompanyFactsExtractor
 from data.silver.sources.sec.transforms import SECFactsTransformer
-from data.silver.sources.sec.transforms import SECMetricsBuilder
 
 
 class SECPipeline(Pipeline):
@@ -24,7 +25,6 @@ class SECPipeline(Pipeline):
 
     self.extractor = SECCompanyFactsExtractor()
     self.transformer = SECFactsTransformer()
-    self.metrics_builder = SECMetricsBuilder()
     self.validator = BasicValidator()
     self.writer = ParquetWriter()
 
@@ -51,13 +51,12 @@ class SECPipeline(Pipeline):
       self.datasets['facts_raw'] = pd.DataFrame()
 
   def transform(self) -> None:
-    """Apply transformations."""
+    """Apply transformations (normalization only)."""
     facts = self.datasets['facts_raw']
     companies = self.datasets['companies']
 
     if facts.empty:
       self.datasets['facts_long'] = pd.DataFrame()
-      self.datasets['metrics_quarterly'] = pd.DataFrame()
       return
 
     # Infer FYE from data for companies without FYE info
@@ -71,19 +70,12 @@ class SECPipeline(Pipeline):
     facts_with_fq = self._add_fiscal_quarter(facts_with_fy, companies)
 
     # Deduplicate by (fiscal_year, fiscal_quarter, filed) for PIT support
-    facts_all_versions = self.transformer.deduplicate(facts_with_fq)
-    self.datasets['facts_long'] = facts_all_versions
+    facts_dedup = self.transformer.deduplicate(facts_with_fq)
 
-    # Build metrics from all versions
-    metrics_q = self.metrics_builder.build(facts_all_versions)
+    # Normalize values (abs for CAPEX, millions for SHARES)
+    facts_normalized = self.transformer.normalize_values(facts_dedup)
 
-    # Add fiscal_quarter (metrics_q has end column from facts)
-    metrics_q = self._add_fiscal_quarter(metrics_q, companies)
-
-    # Drop original fp column (metrics_builder outputs fp as Q1/Q2/Q3/Q4)
-    if 'fp' in metrics_q.columns:
-      metrics_q = metrics_q.drop(columns=['fp'])
-    self.datasets['metrics_quarterly'] = metrics_q
+    self.datasets['facts_long'] = facts_normalized
 
   def _infer_fye(self, facts: pd.DataFrame,
                  companies: pd.DataFrame) -> pd.DataFrame:
@@ -142,7 +134,6 @@ class SECPipeline(Pipeline):
     datasets_to_write = {
         'companies': self.datasets.get('companies'),
         'facts_long': self.datasets.get('facts_long'),
-        'metrics_quarterly': self.datasets.get('metrics_quarterly'),
     }
 
     cf_files = self._get_companyfact_files()

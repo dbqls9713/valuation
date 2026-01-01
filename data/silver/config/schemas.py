@@ -1,5 +1,12 @@
 """
-Schema definitions for Silver datasets with descriptions.
+Schema definitions for Silver datasets.
+
+Silver layer contains normalized data only:
+- facts_long: YTD values as-is from SEC filings
+- prices_daily: Daily prices from Stooq
+- companies: Company metadata
+
+Note: YTD->quarterly and TTM calculations are done in Gold layer.
 """
 from data.silver.core.dataset import ColumnSpec
 from data.silver.core.dataset import DatasetSchema
@@ -58,50 +65,6 @@ FACTS_LONG_SCHEMA = DatasetSchema(
                    'float64',
                    nullable=False,
                    description='Value (YTD for cash flow items)'),
-    ],
-    primary_key=['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'])
-
-METRICS_QUARTERLY_SCHEMA = DatasetSchema(
-    name='metrics_quarterly',
-    description='All filed versions including restatements (for PIT support)',
-    columns=[
-        ColumnSpec('cik10',
-                   'str',
-                   nullable=False,
-                   description='CIK padded to 10 digits'),
-        ColumnSpec('metric',
-                   'str',
-                   nullable=False,
-                   description='Metric name (CFO, CAPEX, SHARES)'),
-        ColumnSpec('fiscal_year',
-                   'int64',
-                   nullable=False,
-                   description='Calculated fiscal year'),
-        ColumnSpec('fiscal_quarter',
-                   'str',
-                   nullable=False,
-                   description='Fiscal quarter (Q1, Q2, Q3, Q4) based on FYE'),
-        ColumnSpec('filed',
-                   'datetime64[ns]',
-                   nullable=False,
-                   description='Filing date'),
-        ColumnSpec('end',
-                   'datetime64[ns]',
-                   nullable=False,
-                   description='Period end date'),
-        ColumnSpec('fy',
-                   'int64',
-                   nullable=False,
-                   description='Fiscal year from SEC filing'),
-        ColumnSpec('q_val',
-                   'float64',
-                   nullable=False,
-                   description='Discrete quarterly value'),
-        ColumnSpec('ttm_val',
-                   'float64',
-                   nullable=True,
-                   description='Trailing 12-month sum (null for <4 quarters)'),
-        ColumnSpec('tag', 'str', nullable=False, description='XBRL tag used'),
     ],
     primary_key=['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'])
 

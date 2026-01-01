@@ -107,6 +107,7 @@ class PanelSchema:
 
 
 _COMMON_COLUMNS = [
+    # Identity (non-nullable)
     ColumnSpec('ticker',
                'str',
                nullable=False,
@@ -119,13 +120,23 @@ _COMMON_COLUMNS = [
                'datetime64[ns]',
                nullable=False,
                description='SEC filing date'),
+    # Fiscal info (non-nullable, for semantic grouping)
+    ColumnSpec('fiscal_year',
+               'int64',
+               nullable=False,
+               description='Fiscal year'),
+    ColumnSpec('fiscal_quarter',
+               'str',
+               nullable=False,
+               description='Fiscal quarter (Q1, Q2, Q3, Q4)'),
+    # Financial metrics (all nullable - depends on data quality)
     ColumnSpec('cfo_q',
                'float64',
                nullable=True,
                description='Quarterly Cash Flow from Operations'),
     ColumnSpec('cfo_ttm',
                'float64',
-               nullable=False,
+               nullable=True,
                description='Trailing 12-month CFO'),
     ColumnSpec('capex_q',
                'float64',
@@ -133,12 +144,13 @@ _COMMON_COLUMNS = [
                description='Quarterly Capital Expenditures'),
     ColumnSpec('capex_ttm',
                'float64',
-               nullable=False,
+               nullable=True,
                description='Trailing 12-month CAPEX'),
     ColumnSpec('shares_q',
                'float64',
                nullable=True,
                description='Quarterly share count'),
+    # Price data (nullable - depends on external data)
     ColumnSpec('date',
                'datetime64[ns]',
                nullable=True,

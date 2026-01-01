@@ -64,7 +64,10 @@ def find_common_and_different_policies(
   if not scenarios:
     return {}, []
 
-  policy_fields = ['capex', 'growth', 'fade', 'shares', 'terminal', 'discount']
+  policy_fields = [
+      'pre_maint_oe', 'maint_capex', 'growth', 'fade', 'shares', 'terminal',
+      'discount'
+  ]
   common: dict[str, str] = {}
   different_per_scenario: list[dict[str, str]] = [{} for _ in scenarios]
 
@@ -94,7 +97,8 @@ def create_short_label(different_policies: dict[str, str],
 
   parts = []
   for key in [
-      'capex', 'discount', 'growth', 'fade', 'shares', 'terminal', 'n_years'
+      'pre_maint_oe', 'maint_capex', 'discount', 'growth', 'fade', 'shares',
+      'terminal', 'n_years'
   ]:
     if key in different_policies:
       parts.append(different_policies[key])
@@ -154,13 +158,17 @@ def calculate_iv_for_date(
 
   policies = create_policies(scenario)
 
-  capex_result = policies['capex'].compute(fundamentals)
-  if pd.isna(capex_result.value):
+  pre_maint_oe_result = policies['pre_maint_oe'].compute(fundamentals)
+  if pd.isna(pre_maint_oe_result.value):
     return None
 
-  oe0 = fundamentals.latest_cfo_ttm - capex_result.value
+  maint_capex_result = policies['maint_capex'].compute(fundamentals)
+  if pd.isna(maint_capex_result.value):
+    return None
 
-  growth_result = policies['growth'].compute(fundamentals, policies['capex'])
+  oe0 = pre_maint_oe_result.value - maint_capex_result.value
+
+  growth_result = policies['growth'].compute(fundamentals)
   if pd.isna(growth_result.value):
     return None
 
@@ -293,7 +301,7 @@ def plot_scenario_comparison(
   _, ax = plt.subplots(figsize=(14, 8))
 
   markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'X', 'P', 'h']
-  colors = plt.cm.tab10.colors
+  colors = plt.colormaps['tab10'].colors  # type: ignore[attr-defined]
 
   for idx, scenario in enumerate(scenarios):
     marker = markers[idx % len(markers)]
@@ -331,7 +339,7 @@ def plot_scenario_comparison(
 
   if common_policies:
     common_parts = []
-    for key in ['capex', 'discount', 'growth', 'n_years']:
+    for key in ['maint_capex', 'discount', 'growth', 'n_years']:
       if key in common_policies:
         common_parts.append(f'{key}={common_policies[key]}')
     if common_parts:

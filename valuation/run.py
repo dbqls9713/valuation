@@ -115,10 +115,15 @@ def run_valuation(
       'as_of_date': str(as_of.date()),
   }
 
-  capex_result = policies['capex'].compute(data)
-  all_diag.update({f'capex_{k}': v for k, v in capex_result.diag.items()})
+  pre_maint_oe_result = policies['pre_maint_oe'].compute(data)
+  all_diag.update(
+      {f'pre_maint_oe_{k}': v for k, v in pre_maint_oe_result.diag.items()})
 
-  growth_result = policies['growth'].compute(data, policies['capex'])
+  maint_capex_result = policies['maint_capex'].compute(data)
+  all_diag.update(
+      {f'maint_capex_{k}': v for k, v in maint_capex_result.diag.items()})
+
+  growth_result = policies['growth'].compute(data)
   all_diag.update({f'growth_{k}': v for k, v in growth_result.diag.items()})
 
   terminal_result = policies['terminal'].compute()
@@ -143,12 +148,13 @@ def run_valuation(
   discount_result = policies['discount'].compute()
   all_diag.update({f'discount_{k}': v for k, v in discount_result.diag.items()})
 
-  oe0 = data.latest_cfo_ttm - capex_result.value
+  # OE = Pre-Maintenance OE - Maintenance CAPEX
+  oe0 = pre_maint_oe_result.value - maint_capex_result.value
   sh0 = data.latest_shares
 
   # Add fundamental data to diagnostics
-  all_diag['fundamentals_cfo_ttm'] = str(data.latest_cfo_ttm)
-  all_diag['fundamentals_capex_ttm'] = str(data.latest_capex_ttm)
+  all_diag['fundamentals_pre_maint_oe'] = str(pre_maint_oe_result.value)
+  all_diag['fundamentals_maint_capex'] = str(maint_capex_result.value)
   all_diag['fundamentals_shares'] = str(data.latest_shares)
   all_diag['fundamentals_oe0'] = str(oe0)
   all_diag['fundamentals_as_of_end'] = str(data.as_of_end.date())
@@ -232,14 +238,11 @@ def main() -> None:
   )
   args = parser.parse_args()
 
-  scenario_map = {
-      'default': ScenarioConfig.default,
-      'raw_capex': ScenarioConfig.raw_capex,
-      'clipped_capex': ScenarioConfig.clipped_capex,
-      'discount_6pct': ScenarioConfig.discount_6pct,
-  }
-
-  config = scenario_map[args.scenario]()
+  if args.scenario == 'default':
+    config = ScenarioConfig.default()
+  else:
+    raise ValueError(
+        f'Unknown scenario: {args.scenario}. Available: default')
 
   loader = ValuationDataLoader(
       gold_path=args.gold_path,

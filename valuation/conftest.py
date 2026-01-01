@@ -15,8 +15,16 @@ def sample_fundamentals() -> FundamentalsSlice:
           [100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210],
           index=pd.date_range('2020-03-31', periods=12, freq='Q'),
       ),
+      cfo_q_history=pd.Series(
+          [25, 28, 30, 33, 35, 38, 40, 43, 45, 48, 50, 53],
+          index=pd.date_range('2020-03-31', periods=12, freq='Q'),
+      ),
       capex_ttm_history=pd.Series(
           [20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42],
+          index=pd.date_range('2020-03-31', periods=12, freq='Q'),
+      ),
+      capex_q_history=pd.Series(
+          [5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11],
           index=pd.date_range('2020-03-31', periods=12, freq='Q'),
       ),
       shares_history=pd.Series(
@@ -41,8 +49,16 @@ def minimal_fundamentals() -> FundamentalsSlice:
           [100, 110, 120],
           index=pd.date_range('2022-12-31', periods=3, freq='Q'),
       ),
+      cfo_q_history=pd.Series(
+          [25, 28, 30],
+          index=pd.date_range('2022-12-31', periods=3, freq='Q'),
+      ),
       capex_ttm_history=pd.Series(
           [20, 22, 24],
+          index=pd.date_range('2022-12-31', periods=3, freq='Q'),
+      ),
+      capex_q_history=pd.Series(
+          [5, 6, 6],
           index=pd.date_range('2022-12-31', periods=3, freq='Q'),
       ),
       shares_history=pd.Series(
@@ -67,8 +83,16 @@ def declining_fundamentals() -> FundamentalsSlice:
           [200, 190, 180, 170, 160, 150, 140, 130],
           index=pd.date_range('2021-12-31', periods=8, freq='Q'),
       ),
+      cfo_q_history=pd.Series(
+          [50, 48, 45, 43, 40, 38, 35, 33],
+          index=pd.date_range('2021-12-31', periods=8, freq='Q'),
+      ),
       capex_ttm_history=pd.Series(
           [40, 38, 36, 34, 32, 30, 28, 26],
+          index=pd.date_range('2021-12-31', periods=8, freq='Q'),
+      ),
+      capex_q_history=pd.Series(
+          [10, 10, 9, 9, 8, 8, 7, 7],
           index=pd.date_range('2021-12-31', periods=8, freq='Q'),
       ),
       shares_history=pd.Series(
