@@ -5,14 +5,13 @@ Validates all panels against their schemas:
 - Schema column presence
 - Primary key uniqueness
 - Nullable constraints
+- Domain-specific checks (filed >= end, OE statistics)
 
 Usage:
   python -m data.gold.validate
   python -m data.gold.validate --gold-dir data/gold/out
 """
-
 import argparse
-from dataclasses import dataclass
 import logging
 from pathlib import Path
 
@@ -21,6 +20,11 @@ import pandas as pd
 from data.gold.config.schemas import BACKTEST_PANEL_SCHEMA
 from data.gold.config.schemas import PanelSchema
 from data.gold.config.schemas import VALUATION_PANEL_SCHEMA
+from data.shared.validation.base import CheckResult
+from data.shared.validation.common import DateOrderValidator
+from data.shared.validation.common import SchemaValidator
+from data.shared.validation.common import UniqueKeyValidator
+from data.shared.validation.runner import ValidationRunner
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,134 +34,64 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class CheckResult:
-  """Result of a single validation check."""
-  name: str
-  ok: bool
-  details: str
+def _check_oe_positive(df: pd.DataFrame, name: str) -> CheckResult:
+  """Check Owner Earnings (CFO - CAPEX) positivity rate."""
+  if 'cfo_ttm' not in df.columns or 'capex_ttm' not in df.columns:
+    return CheckResult(name=name,
+                       ok=True,
+                       details='OE columns not present (skipped)')
+
+  oe_positive = int(((df['cfo_ttm'] - df['capex_ttm']) > 0).sum())
+  total = len(df)
+  pct = oe_positive / total * 100 if total > 0 else 0
+
+  return CheckResult(name=name,
+                     ok=True,
+                     details=f'OE positive: {oe_positive}/{total} ({pct:.1f}%)')
 
 
-def validate_panel(
-    df: pd.DataFrame,
-    schema: PanelSchema,
-) -> list[CheckResult]:
-  """
-  Validate a panel DataFrame against its schema.
-
-  Args:
-    df: Panel DataFrame to validate
-    schema: Schema to validate against
-
-  Returns:
-    List of CheckResult objects
-  """
-  results = []
-
-  expected_cols = set(schema.column_names())
-  actual_cols = set(df.columns)
-  missing = expected_cols - actual_cols
-  extra = actual_cols - expected_cols
-
-  if missing:
-    results.append(
-        CheckResult(
-            name=f'{schema.name}_columns',
-            ok=False,
-            details=f'Missing columns: {missing}',
-        ))
-  elif extra:
-    results.append(
-        CheckResult(
-            name=f'{schema.name}_columns',
-            ok=True,
-            details=f'Extra columns (ok): {extra}',
-        ))
-  else:
-    results.append(
-        CheckResult(
-            name=f'{schema.name}_columns',
-            ok=True,
-            details=f'All {len(expected_cols)} columns present',
-        ))
-
-  if schema.primary_key:
-    pk_cols = [c for c in schema.primary_key if c in df.columns]
-    if pk_cols:
-      duplicates = df.duplicated(subset=pk_cols, keep=False).sum()
-      results.append(
-          CheckResult(
-              name=f'{schema.name}_pk_unique',
-              ok=duplicates == 0,
-              details=f'Primary key duplicates: {duplicates}',
-          ))
-
-  for col_spec in schema.columns:
-    if col_spec.name not in df.columns:
-      continue
-    if col_spec.nullable:
-      continue
-
-    null_count = df[col_spec.name].isna().sum()
-    results.append(
-        CheckResult(
-            name=f'{schema.name}_{col_spec.name}_not_null',
-            ok=null_count == 0,
-            details=f'Null count: {null_count}',
-        ))
-
-  return results
-
-
-def _validate_panel_file(
-    gold_dir: Path,
-    schema: PanelSchema,
-) -> list[CheckResult]:
-  """Validate a panel parquet file against its schema."""
+def _validate_panel(gold_dir: Path, schema: PanelSchema,
+                    runner: ValidationRunner) -> None:
+  """Add validation checks for a panel to the runner."""
   path = gold_dir / f'{schema.name}.parquet'
   panel_name = schema.name
 
   if not path.exists():
-    return [
-        CheckResult(
-            name=f'{panel_name}_exists',
-            ok=False,
-            details=f'File not found: {path}',
-        )
-    ]
+    runner.add_check(f'{panel_name}_exists',
+                     lambda n=panel_name, p=path: CheckResult(
+                         name=f'{n}_exists',
+                         ok=False,
+                         details=f'File not found: {p}',
+                     ))
+    return
 
   df = pd.read_parquet(path)
-  results = [
-      CheckResult(
-          name=f'{panel_name}_exists',
-          ok=True,
-          details=f'Shape: {df.shape}',
-      )
-  ]
+  logger.info('Loaded %s: %s', panel_name, df.shape)
 
-  results.extend(validate_panel(df, schema))
+  runner.add_check(f'{panel_name}_exists',
+                   lambda n=panel_name, s=df.shape: CheckResult(
+                       name=f'{n}_exists',
+                       ok=True,
+                       details=f'Shape: {s}',
+                   ))
+
+  runner.add_check(f'{panel_name}_schema',
+                   SchemaValidator(schema).validate, df, panel_name)
+
+  if schema.primary_key:
+    pk_cols = [c for c in schema.primary_key if c in df.columns]
+    if pk_cols:
+      runner.add_check(f'{panel_name}_pk',
+                       UniqueKeyValidator(pk_cols).validate, df,
+                       f'{panel_name}_pk_unique')
 
   if 'end' in df.columns and 'filed' in df.columns:
-    invalid = (df['filed'] < df['end']).sum()
-    results.append(
-        CheckResult(
-            name=f'{panel_name}_filed_ge_end',
-            ok=invalid == 0,
-            details=f'Rows with filed < end: {invalid}',
-        ))
+    runner.add_check(f'{panel_name}_dates',
+                     DateOrderValidator('filed', 'end').validate, df,
+                     f'{panel_name}_filed_ge_end')
 
-  if 'cfo_ttm' in df.columns and 'capex_ttm' in df.columns:
-    oe_positive = ((df['cfo_ttm'] - df['capex_ttm']) > 0).sum()
-    total = len(df)
-    pct = oe_positive / total * 100 if total > 0 else 0
-    results.append(
-        CheckResult(
-            name=f'{panel_name}_oe_positive',
-            ok=True,
-            details=f'OE positive: {oe_positive}/{total} ({pct:.1f}%)',
-        ))
-
-  return results
+  runner.add_check(f'{panel_name}_oe', _check_oe_positive, df,
+                   f'{panel_name}_oe_positive')
 
 
 def main() -> None:
@@ -173,25 +107,15 @@ def main() -> None:
 
   logger.info('Validating Gold layer: %s', args.gold_dir)
 
-  all_results: list[CheckResult] = []
-  all_results.extend(_validate_panel_file(args.gold_dir,
-                                          VALUATION_PANEL_SCHEMA))
-  all_results.extend(_validate_panel_file(args.gold_dir, BACKTEST_PANEL_SCHEMA))
+  runner = ValidationRunner('Gold Layer')
 
-  passed = sum(1 for r in all_results if r.ok)
-  failed = sum(1 for r in all_results if not r.ok)
+  _validate_panel(args.gold_dir, VALUATION_PANEL_SCHEMA, runner)
+  _validate_panel(args.gold_dir, BACKTEST_PANEL_SCHEMA, runner)
 
-  logger.info('')
-  logger.info('=' * 70)
-  logger.info('Validation Results: %d passed, %d failed', passed, failed)
-  logger.info('=' * 70)
+  runner.run()
+  runner.log_summary()
 
-  for result in all_results:
-    status = '✓' if result.ok else '✗'
-    level = logging.INFO if result.ok else logging.ERROR
-    logger.log(level, '%s %s: %s', status, result.name, result.details)
-
-  if failed > 0:
+  if not runner.all_passed:
     raise SystemExit(1)
 
 

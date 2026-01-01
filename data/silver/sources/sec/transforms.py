@@ -175,6 +175,9 @@ class SECMetricsBuilder:
     For each row, find the previous quarter's YTD value that was filed before
     this row's filed date, then subtract to get the quarterly value.
     This ensures each filed version uses only data available at that time.
+
+    Only processes rows where fp matches fiscal_quarter to avoid
+    incorrectly processing comparative disclosures.
     """
     if df_ytd.empty:
       return pd.DataFrame()
@@ -183,6 +186,7 @@ class SECMetricsBuilder:
     df = df.sort_values('filed')
 
     prev_fp_map = {'Q2': 'Q1', 'Q3': 'Q2', 'FY': 'Q3'}
+    fp_to_fq = {'Q1': 'Q1', 'Q2': 'Q2', 'Q3': 'Q3', 'FY': 'Q4'}
 
     out_rows = []
 
@@ -192,12 +196,20 @@ class SECMetricsBuilder:
       filed = row['filed']
       ytd_val = float(row[value_col])
 
+      # Skip comparative disclosures (fp doesn't match fiscal_quarter)
+      expected_fq = fp_to_fq.get(fp)
+      if expected_fq and row.get('fiscal_quarter') != expected_fq:
+        continue
+
       if fp == 'Q1':
         q_val = ytd_val
       elif fp in prev_fp_map:
         prev_q = prev_fp_map[fp]
+        # Match fp AND fiscal_quarter to avoid comparative disclosures
         candidates = df[(df['fiscal_year'] == fiscal_year) &
-                        (df['fp'] == prev_q) & (df['filed'] < filed)]
+                        (df['fp'] == prev_q) &
+                        (df['fiscal_quarter'] == prev_q) &
+                        (df['filed'] < filed)]
 
         if not candidates.empty:
           prev_row = candidates.sort_values('filed').iloc[-1]
