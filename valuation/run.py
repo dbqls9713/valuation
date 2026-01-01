@@ -22,7 +22,7 @@ Usage:
 import argparse
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 
@@ -109,19 +109,21 @@ def run_valuation(
   data = FundamentalsSlice.from_panel(panel, ticker, as_of)
 
   policies = create_policies(config)
-  all_diag: dict[str, str] = {
+  all_diag: dict[str, Any] = {
       'scenario': config.name,
       'ticker': ticker,
       'as_of_date': str(as_of.date()),
   }
 
   pre_maint_oe_result = policies['pre_maint_oe'].compute(data)
-  all_diag.update(
-      {f'pre_maint_oe_{k}': v for k, v in pre_maint_oe_result.diag.items()})
+  all_diag.update({
+      f'pre_maint_oe_{k}': v for k, v in pre_maint_oe_result.diag.items()
+  })
 
   maint_capex_result = policies['maint_capex'].compute(data)
-  all_diag.update(
-      {f'maint_capex_{k}': v for k, v in maint_capex_result.diag.items()})
+  all_diag.update({
+      f'maint_capex_{k}': v for k, v in maint_capex_result.diag.items()
+  })
 
   growth_result = policies['growth'].compute(data)
   all_diag.update({f'growth_{k}': v for k, v in growth_result.diag.items()})
@@ -221,7 +223,7 @@ def main() -> None:
       '--scenario',
       type=str,
       default='default',
-      choices=['default', 'raw_capex', 'clipped_capex', 'discount_6pct'],
+      choices=['default'],
       help='Scenario preset',
   )
   parser.add_argument(
@@ -241,8 +243,7 @@ def main() -> None:
   if args.scenario == 'default':
     config = ScenarioConfig.default()
   else:
-    raise ValueError(
-        f'Unknown scenario: {args.scenario}. Available: default')
+    raise ValueError(f'Unknown scenario: {args.scenario}. Available: default')
 
   loader = ValuationDataLoader(
       gold_path=args.gold_path,

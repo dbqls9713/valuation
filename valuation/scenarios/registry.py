@@ -6,7 +6,7 @@ while still instantiating the correct policy classes.
 """
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import cast, TypedDict
 
 from valuation.policies.discount import DiscountPolicy
 from valuation.policies.discount import FixedRate
@@ -23,6 +23,18 @@ from valuation.policies.shares import SharePolicy
 from valuation.policies.terminal import GordonTerminal
 from valuation.policies.terminal import TerminalPolicy
 from valuation.scenarios.config import ScenarioConfig
+
+
+class PolicyBundle(TypedDict):
+  """Type-safe bundle of instantiated policies."""
+  pre_maint_oe: PreMaintenanceOEPolicy
+  maint_capex: MaintenanceCapexPolicy
+  growth: GrowthPolicy
+  fade: FadePolicy
+  shares: SharePolicy
+  terminal: TerminalPolicy
+  discount: DiscountPolicy
+
 
 PRE_MAINT_OE_POLICIES: dict[str, Callable[[], PreMaintenanceOEPolicy]] = {
     'ttm': TTMPreMaintenanceOE,
@@ -73,7 +85,7 @@ POLICY_REGISTRY = {
 }
 
 
-def create_policies(config: ScenarioConfig) -> dict[str, Any]:
+def create_policies(config: ScenarioConfig) -> PolicyBundle:
   """
   Create policy instances from scenario configuration.
 
@@ -128,15 +140,15 @@ def create_policies(config: ScenarioConfig) -> dict[str, Any]:
     raise KeyError(f"Unknown discount policy: '{config.discount}'. "
                    f'Available: {list(DISCOUNT_POLICIES.keys())}') from e
 
-  return {
-      'pre_maint_oe': pre_maint_oe_factory(),
-      'maint_capex': maint_capex_factory(),
-      'growth': growth_factory(),
-      'fade': fade_factory(),
-      'shares': shares_factory(),
-      'terminal': terminal_factory(),
-      'discount': discount_factory(),
-  }
+  return PolicyBundle(
+      pre_maint_oe=pre_maint_oe_factory(),
+      maint_capex=maint_capex_factory(),
+      growth=growth_factory(),
+      fade=fade_factory(),
+      shares=shares_factory(),
+      terminal=terminal_factory(),
+      discount=discount_factory(),
+  )
 
 
 def list_policies() -> dict[str, list[str]]:
