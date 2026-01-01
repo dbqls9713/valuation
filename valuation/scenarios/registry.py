@@ -12,10 +12,13 @@ from valuation.policies.discount import DiscountPolicy
 from valuation.policies.discount import FixedRate
 from valuation.policies.fade import FadePolicy
 from valuation.policies.fade import LinearFade
+from valuation.policies.growth import AvgOEGrowth
 from valuation.policies.growth import FixedGrowth
 from valuation.policies.growth import GrowthPolicy
+from valuation.policies.maintenance_capex import AvgCapex
 from valuation.policies.maintenance_capex import MaintenanceCapexPolicy
 from valuation.policies.maintenance_capex import TTMCapex
+from valuation.policies.pre_maintenance_oe import AvgCFO
 from valuation.policies.pre_maintenance_oe import PreMaintenanceOEPolicy
 from valuation.policies.pre_maintenance_oe import TTMPreMaintenanceOE
 from valuation.policies.shares import AvgShareChange
@@ -38,10 +41,12 @@ class PolicyBundle(TypedDict):
 
 PRE_MAINT_OE_POLICIES: dict[str, Callable[[], PreMaintenanceOEPolicy]] = {
     'ttm': TTMPreMaintenanceOE,
+    'avg_3y': AvgCFO,
 }
 
 MAINT_CAPEX_POLICIES: dict[str, Callable[[], MaintenanceCapexPolicy]] = {
     'ttm': TTMCapex,
+    'avg_3y': AvgCapex,
 }
 
 GROWTH_POLICIES: dict[str, Callable[[], GrowthPolicy]] = {
@@ -52,6 +57,8 @@ GROWTH_POLICIES: dict[str, Callable[[], GrowthPolicy]] = {
     'fixed_0p10': lambda: FixedGrowth(growth_rate=0.10),
     'fixed_0p12': lambda: FixedGrowth(growth_rate=0.12),
     'fixed_0p15': lambda: FixedGrowth(growth_rate=0.15),
+    'avg_oe_3y': lambda: AvgOEGrowth(min_growth=0.0, max_growth=0.20),
+    'avg_oe_3y_clip15': lambda: AvgOEGrowth(min_growth=0.0, max_growth=0.15),
 }
 
 FADE_POLICIES: dict[str, Callable[[], FadePolicy]] = {

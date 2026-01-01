@@ -13,6 +13,7 @@ import pandas as pd
 
 _T = TypeVar('_T')
 
+
 @dataclass
 class PolicyOutput(Generic[_T]):
   """
@@ -28,6 +29,42 @@ class PolicyOutput(Generic[_T]):
   value: _T
   diag: dict[str, Any] = field(default_factory=dict)
 
+
+@dataclass
+class QuarterData:
+  """
+  Financial data for a single fiscal quarter.
+
+  All metrics are synchronized - same quarter, same filing version.
+  Missing values are explicitly None.
+
+  Attributes:
+    fiscal_year: Fiscal year (e.g., 2024)
+    fiscal_quarter: Quarter identifier (Q1, Q2, Q3, Q4)
+    end: Quarter end date
+    filed: SEC filing date
+    cfo_ttm: Trailing 12-month Cash Flow from Operations
+    capex_ttm: Trailing 12-month Capital Expenditures
+    shares: Shares outstanding
+    cfo_q: Quarterly CFO (optional)
+    capex_q: Quarterly CAPEX (optional)
+  """
+  fiscal_year: int
+  fiscal_quarter: str
+  end: pd.Timestamp
+  filed: pd.Timestamp
+  cfo_ttm: Optional[float] = None
+  capex_ttm: Optional[float] = None
+  shares: Optional[float] = None
+  cfo_q: Optional[float] = None
+  capex_q: Optional[float] = None
+
+  @property
+  def period(self) -> str:
+    """Return period string (e.g., '2024Q1')."""
+    return f'{self.fiscal_year}{self.fiscal_quarter}'
+
+
 @dataclass
 class FundamentalsSlice:
   """
@@ -38,32 +75,144 @@ class FundamentalsSlice:
 
   Attributes:
     ticker: Company ticker symbol
-    as_of_end: Quarter end date for valuation
-    filed_cutoff: PIT cutoff date (only data filed before this is used)
-    cfo_ttm_history: Series of TTM CFO values indexed by quarter end date
-    capex_ttm_history: Series of TTM CAPEX indexed by quarter end date
-    shares_history: Series of shares count indexed by quarter end date
-    latest_cfo_ttm: Most recent TTM CFO value
-    latest_capex_ttm: Most recent TTM CAPEX value
-    latest_shares: Most recent shares count
-    latest_filed: Filing date of the most recent data
-    cfo_q_history: Optional series of quarterly CFO (for OE policies)
-    capex_q_history: Optional series of quarterly CAPEX (for OE policies)
+    as_of_date: PIT cutoff date (only data filed before this is used)
+    quarters: List of QuarterData, sorted by fiscal period (oldest first)
   """
   ticker: str
-  as_of_end: pd.Timestamp
-  filed_cutoff: pd.Timestamp
-  cfo_ttm_history: pd.Series
-  capex_ttm_history: pd.Series
-  shares_history: pd.Series
-  latest_cfo_ttm: float
-  latest_capex_ttm: float
-  latest_shares: float
-  latest_filed: pd.Timestamp
-  cfo_q_history: pd.Series = field(
-      default_factory=lambda: pd.Series(dtype=float))
-  capex_q_history: pd.Series = field(
-      default_factory=lambda: pd.Series(dtype=float))
+  as_of_date: pd.Timestamp
+  quarters: list[QuarterData]
+
+  @property
+  def latest(self) -> QuarterData:
+    """Return the most recent quarter."""
+    return self.quarters[-1]
+
+  @property
+  def latest_cfo_ttm(self) -> float:
+    """Most recent TTM CFO value."""
+    val = self.latest.cfo_ttm
+    if val is None:
+      raise ValueError(f'{self.ticker}: Missing cfo_ttm in latest quarter')
+    return val
+
+  @property
+  def latest_capex_ttm(self) -> float:
+    """Most recent TTM CAPEX value."""
+    val = self.latest.capex_ttm
+    if val is None:
+      raise ValueError(f'{self.ticker}: Missing capex_ttm in latest quarter')
+    return val
+
+  @property
+  def latest_shares(self) -> float:
+    """Most recent shares count."""
+    val = self.latest.shares
+    if val is None:
+      raise ValueError(f'{self.ticker}: Missing shares in latest quarter')
+    return val
+
+  @property
+  def latest_filed(self) -> pd.Timestamp:
+    """Filing date of the most recent data."""
+    return self.latest.filed
+
+  @property
+  def as_of_end(self) -> pd.Timestamp:
+    """Quarter end date of the most recent data (alias for latest.end)."""
+    return self.latest.end
+
+  @property
+  def cfo_ttm_history(self) -> list[Optional[float]]:
+    """List of TTM CFO values (oldest first)."""
+    return [q.cfo_ttm for q in self.quarters]
+
+  @property
+  def capex_ttm_history(self) -> list[Optional[float]]:
+    """List of TTM CAPEX values (oldest first)."""
+    return [q.capex_ttm for q in self.quarters]
+
+  @property
+  def shares_history(self) -> list[Optional[float]]:
+    """List of shares values (oldest first)."""
+    return [q.shares for q in self.quarters]
+
+  def weighted_yearly_avg(
+      self,
+      metric: str,
+      weights: tuple[float, ...] = (3.0, 2.0, 1.0),
+  ) -> tuple[Optional[float], dict[str, Any]]:
+    """
+    Calculate weighted average of a metric over N years.
+
+    Buckets quarters by years ago from as_of_date:
+      - Year 1: 0 ~ 1.25 years ago
+      - Year 2: 1.25 ~ 2.25 years ago
+      - Year N: (N-1)+0.25 ~ N+0.25 years ago
+
+    For each year, calculates average of available quarters.
+    Then applies weighted average across years with data.
+
+    Args:
+      metric: Attribute name on QuarterData (e.g., 'cfo_ttm', 'capex_ttm')
+      weights: Weights for each year (default: 3:2:1 for 3 years)
+               Length determines how many years to consider.
+
+    Returns:
+      Tuple of (weighted_avg, diagnostics_dict)
+      Returns (None, diag) if no data available
+    """
+    num_years = len(weights)
+    year_buckets: dict[int, list[float]] = {
+        i: [] for i in range(1, num_years + 1)
+    }
+
+    for q in self.quarters:
+      val = getattr(q, metric, None)
+      if val is None:
+        continue
+
+      years_ago = (self.as_of_date - q.end).days / 365.25
+
+      if years_ago < 0:
+        continue
+
+      for year_idx in range(1, num_years + 1):
+        lower = 0 if year_idx == 1 else (year_idx - 1) + 0.25
+        upper = year_idx + 0.25
+        if lower <= years_ago < upper:
+          year_buckets[year_idx].append(val)
+          break
+
+    yearly_avgs: list[tuple[float, float, int]] = []
+    diag_yearly: dict[str, Any] = {}
+
+    for year_idx, weight in enumerate(weights, 1):
+      bucket = year_buckets[year_idx]
+      if bucket:
+        avg = sum(bucket) / len(bucket)
+        yearly_avgs.append((avg, weight, year_idx))
+        diag_yearly[f'year{year_idx}_avg'] = avg
+        diag_yearly[f'year{year_idx}_n'] = len(bucket)
+
+    if not yearly_avgs:
+      return None, {'error': 'no_data', 'metric': metric}
+
+    total_weight = sum(w for _, w, _ in yearly_avgs)
+    weighted_avg = sum(avg * w for avg, w, _ in yearly_avgs) / total_weight
+
+    years_used = [y for _, _, y in yearly_avgs]
+    weights_used = [w for _, w, _ in yearly_avgs]
+
+    diag = {
+        'method': 'weighted_yearly_avg',
+        'metric': metric,
+        'years_used': years_used,
+        'weights_used': weights_used,
+        'weighted_avg': weighted_avg,
+        **diag_yearly,
+    }
+
+    return weighted_avg, diag
 
   @classmethod
   def from_panel(cls, panel: pd.DataFrame, ticker: str,
@@ -83,50 +232,59 @@ class FundamentalsSlice:
     if ticker_data.empty:
       raise ValueError(f'No data for ticker {ticker}')
 
-    # PIT filtering: only data filed on or before as_of_date
     pit_data = ticker_data[ticker_data['filed'] <= as_of_date].copy()
     if pit_data.empty:
       raise ValueError(f'No data for {ticker} as of {as_of_date.date()}')
 
-    # For each quarter end, keep only the latest filed version
-    # (This handles restatements where multiple filings exist for same quarter)
-    pit_data = pit_data.sort_values(['end', 'filed'])
-    pit_data = pit_data.groupby('end', as_index=False).tail(1)
+    pit_data = pit_data.sort_values('filed')
+    pit_data = pit_data.groupby(['fiscal_year', 'fiscal_quarter'],
+                                as_index=False).tail(1)
 
-    # Sort by end date to get latest quarter
-    pit_data = pit_data.sort_values('end')
-    latest = pit_data.iloc[-1]
+    pit_data = pit_data.sort_values(['fiscal_year', 'fiscal_quarter'])
 
-    # Validate required fields
-    required_fields = {
-        'cfo_ttm': latest['cfo_ttm'],
-        'capex_ttm': latest['capex_ttm'],
-        'shares_q': latest['shares_q'],
-    }
-    missing = [k for k, v in required_fields.items() if pd.isna(v)]
+    quarters: list[QuarterData] = []
+    for _, row in pit_data.iterrows():
+      qd = QuarterData(
+          fiscal_year=int(row['fiscal_year']),
+          fiscal_quarter=str(row['fiscal_quarter']),
+          end=row['end'],
+          filed=row['filed'],
+          cfo_ttm=_safe_float(row.get('cfo_ttm')),
+          capex_ttm=_safe_float(row.get('capex_ttm')),
+          shares=_safe_float(row.get('shares_q')),
+          cfo_q=_safe_float(row.get('cfo_q')),
+          capex_q=_safe_float(row.get('capex_q')),
+      )
+      quarters.append(qd)
+
+    if not quarters:
+      raise ValueError(f'No valid quarters for {ticker} as of {as_of_date}')
+
+    latest = quarters[-1]
+    missing = []
+    if latest.cfo_ttm is None:
+      missing.append('cfo_ttm')
+    if latest.capex_ttm is None:
+      missing.append('capex_ttm')
+    if latest.shares is None:
+      missing.append('shares')
     if missing:
       raise ValueError(
           f'{ticker}: Missing required data as of {as_of_date.date()}: '
           f'{', '.join(missing)}')
 
-    return cls(
-        ticker=ticker,
-        as_of_end=latest['end'],
-        filed_cutoff=as_of_date,
-        cfo_ttm_history=pit_data.set_index('end')['cfo_ttm'],
-        cfo_q_history=(pit_data.set_index('end')['cfo_q']
-                       if 'cfo_q' in pit_data.columns else pd.Series(
-                           dtype=float)),
-        capex_ttm_history=pit_data.set_index('end')['capex_ttm'],
-        capex_q_history=(pit_data.set_index('end')['capex_q']
-                         if 'capex_q' in pit_data.columns else pd.Series(
-                             dtype=float)),
-        shares_history=pit_data.set_index('end')['shares_q'],
-        latest_cfo_ttm=float(latest['cfo_ttm']),
-        latest_capex_ttm=float(latest['capex_ttm']),
-        latest_shares=float(latest['shares_q']),
-        latest_filed=latest['filed'],
-    )
+    return cls(ticker=ticker, as_of_date=as_of_date, quarters=quarters)
+
+
+def _safe_float(val: Any) -> Optional[float]:
+  """Convert value to float, returning None if NA or invalid."""
+  if val is None or pd.isna(val):
+    return None
+  try:
+    return float(val)
+  except (ValueError, TypeError):
+    return None
+
 
 @dataclass
 class MarketSlice:
@@ -139,6 +297,7 @@ class MarketSlice:
   """
   price: float
   price_date: pd.Timestamp
+
 
 @dataclass
 class PreparedInputs:
@@ -172,6 +331,7 @@ class PreparedInputs:
     if not self.growth_path:
       return self.g_terminal
     return self.growth_path[-1]
+
 
 @dataclass
 class ValuationResult:
@@ -218,6 +378,7 @@ class ValuationResult:
       })
     result.update(self.diag)
     return result
+
 
 @dataclass
 class ExclusionReason:

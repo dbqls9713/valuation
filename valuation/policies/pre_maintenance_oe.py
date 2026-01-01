@@ -52,3 +52,36 @@ class TTMPreMaintenanceOE(PreMaintenanceOEPolicy):
                             'pre_maint_oe_method': 'ttm',
                             'cfo_ttm': cfo_ttm,
                         })
+
+
+class AvgCFO(PreMaintenanceOEPolicy):
+  """
+  Weighted average CFO over 3 years with 3:2:1 weights.
+
+  Buckets quarters by years ago from as_of_date:
+    - Year 1: 0 ~ 1.25 years ago (weight 3)
+    - Year 2: 1.25 ~ 2.25 years ago (weight 2)
+    - Year 3: 2.25 ~ 3.25 years ago (weight 1)
+
+  Falls back to TTM if insufficient data.
+  """
+
+  def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
+    """Return weighted 3-year average of TTM CFO."""
+    weighted_avg, diag = data.weighted_yearly_avg('cfo_ttm')
+
+    if weighted_avg is None:
+      return PolicyOutput(value=data.latest_cfo_ttm,
+                          diag={
+                              'pre_maint_oe_method': 'weighted_avg_3y',
+                              'fallback': 'ttm',
+                              'pre_maint_oe': data.latest_cfo_ttm,
+                              **diag,
+                          })
+
+    return PolicyOutput(value=weighted_avg,
+                        diag={
+                            'pre_maint_oe_method': 'weighted_avg_3y',
+                            'pre_maint_oe': weighted_avg,
+                            **diag,
+                        })

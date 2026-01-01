@@ -55,3 +55,39 @@ class TTMCapex(MaintenanceCapexPolicy):
                             'capex_ttm': data.latest_capex_ttm,
                             'maint_capex': capex,
                         })
+
+
+class AvgCapex(MaintenanceCapexPolicy):
+  """
+  Weighted average CAPEX over 3 years with 3:2:1 weights.
+
+  Buckets quarters by years ago from as_of_date:
+    - Year 1: 0 ~ 1.25 years ago (weight 3)
+    - Year 2: 1.25 ~ 2.25 years ago (weight 2)
+    - Year 3: 2.25 ~ 3.25 years ago (weight 1)
+
+  Falls back to TTM if insufficient data.
+  """
+
+  def compute(self, data: FundamentalsSlice) -> PolicyOutput[float]:
+    """Return weighted 3-year average of TTM CAPEX."""
+    weighted_avg, diag = data.weighted_yearly_avg('capex_ttm')
+
+    if weighted_avg is None:
+      avg_capex = abs(data.latest_capex_ttm)
+      return PolicyOutput(value=avg_capex,
+                          diag={
+                              'maint_capex_method': 'weighted_avg_3y',
+                              'fallback': 'ttm',
+                              'maint_capex': avg_capex,
+                              **diag,
+                          })
+
+    avg_capex = abs(weighted_avg)
+
+    return PolicyOutput(value=avg_capex,
+                        diag={
+                            'maint_capex_method': 'weighted_avg_3y',
+                            'maint_capex': avg_capex,
+                            **diag,
+                        })
