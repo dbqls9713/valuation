@@ -213,6 +213,7 @@ def plot_scenario_comparison(
     end_date: pd.Timestamp,
     output_dir: Path,
     loader: ValuationDataLoader,
+    month_interval: int = 3,
 ) -> None:
   """Plot IV comparison for different scenarios vs market price."""
   ticker_panel = panel[panel['ticker'] == ticker].copy()
@@ -233,16 +234,18 @@ def plot_scenario_comparison(
     logger.error('No scenarios provided')
     return
 
-  quarter_ends = sorted(ticker_panel['end'].unique())
+  freq = f'{month_interval}M' if month_interval > 1 else 'M'
+  backtest_dates = pd.date_range(start=start_date, end=end_date, freq=freq)
 
   results: dict[str, list] = {'dates': [], 'market_price': []}
   for scenario in scenarios:
     results[scenario.name] = []
 
-  logger.info('Calculating IVs for %d scenarios across %d quarters...',
-              len(scenarios), len(quarter_ends))
+  logger.info(
+      'Calculating IVs for %d scenarios across %d dates (%d-month interval)...',
+      len(scenarios), len(backtest_dates), month_interval)
 
-  for as_of_date in quarter_ends:
+  for as_of_date in backtest_dates:
     scenario_results = {}
     market_price = None
 
@@ -401,6 +404,10 @@ Examples:
                       type=Path,
                       default=Path('data/silver/out'),
                       help='Path to Silver directory')
+  parser.add_argument('--month-interval',
+                      type=int,
+                      default=3,
+                      help='Backtest interval in months (default: 3)')
   parser.add_argument('--verbose',
                       '-v',
                       action='store_true',
@@ -474,6 +481,7 @@ Examples:
         end_date=end,
         output_dir=args.output_dir,
         loader=loader,
+        month_interval=args.month_interval,
     )
 
   logger.info('All charts saved to: %s', args.output_dir)
