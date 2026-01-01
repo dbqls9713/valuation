@@ -66,14 +66,41 @@ python -m valuation.analysis.backtest_from_configs \
   --config-dir example/scenarios \
   --output output/valuation/bigtech.csv
 
-# 3. Visualize comparison
+# 3. Visualize comparison (with parallel processing)
 python -m valuation.analysis.plot_prices \
   --tickers-file example/tickers/bigtech.txt \
   --start-date 2020-01-01 \
   --end-date 2025-12-31 \
   --config-dir example/scenarios \
-  --output-dir output/analysis/price_charts
+  --output-dir output/analysis/price_charts \
+  --concurrency 4
 ```
+
+### Stock Screening
+
+Screen stocks based on valuation band criteria:
+
+```bash
+# Find undervalued stocks within reliable valuation bands
+python -m valuation.analysis.band_screening \
+  --tickers-file data/snp500.txt \
+  --lower-config scenarios/grid_search/conservative.json \
+  --upper-config scenarios/grid_search/aggressive.json \
+  --start-date 2016-01-01 \
+  --end-date 2025-12-31 \
+  --tolerance-day 90 \
+  --min-hit-rate 0.6 \
+  --min-inband-ratio 0.5 \
+  --dev-threshold 0.3 \
+  --concurrency 8 \
+  --output output/screened_tickers.txt
+```
+
+**Screening Criteria:**
+
+- `min-hit-rate`: Minimum ratio of quarters with valid IV data
+- `min-inband-ratio`: Market price within lower/upper IV bounds
+- `dev-threshold`: Current undervaluation level (L(T)-P(T))/W(T)
 
 **Example Output:**
 
@@ -172,11 +199,16 @@ valuation/
 │   ├── scenarios/       # Scenario configs
 │   └── analysis/        # Analysis tools
 │       ├── README.md    # Analysis docs
-│       ├── batch_valuation.py       # Multi-company
+│       ├── batch_valuation.py       # Multi-company valuation
 │       ├── backtest_from_configs.py # Config-based backtest
 │       ├── generate_grid_configs.py # Grid search generator
 │       ├── plot_prices.py           # Scenario visualization
+│       ├── band_screening.py        # Stock screening
 │       └── sensitivity.py           # Sensitivity tables
+│
+├── tools/               # Utility scripts
+│   ├── filter_tickers.py    # Sector-based filtering
+│   └── parquet_to_csv.py    # Data export
 │
 ├── scenarios/           # JSON scenario configs
 │   ├── README.md       # Scenario documentation
@@ -195,17 +227,28 @@ valuation/
 - **Grid search**: Automatic generation of scenario combinations
 - **Multiple CAPEX methods**: Raw, 3yr weighted, intensity clipping
 - **Batch processing**: Valuation for entire stock lists
+- **Parallel processing**: Concurrent execution for faster analysis
+- **Stock screening**: Filter undervalued stocks within reliable valuation bands
 - **Visualization**: Compare scenarios with intelligent legend (differences only)
 - **Sensitivity analysis**: 2D tables (discount × growth rates)
 - **Full diagnostics**: Every policy returns value + detailed diagnostics
 
 ## Data Coverage
 
-**Supported**: 31 tickers across industries (Tech, Consumer, Industrial,
+**Available**: 10,500+ US-listed companies from SEC EDGAR
+
+**Recommended for DCF**: Non-financial sectors (Tech, Consumer, Industrial,
 Healthcare, Energy, Materials, Telecom, Retail)
 
-**Not supported**: Financial services (Banks, Insurance) - different
-valuation approach needed
+**Not recommended**: Financial services (Banks, Insurance), Utilities,
+REITs - different valuation approaches needed
+
+### Ticker Filtering
+
+```bash
+# Filter out financial/utility/REIT sectors from S&P 500
+python tools/filter_tickers.py data/snp500.txt -o data/snp500_filtered.txt
+```
 
 ## Configuration
 

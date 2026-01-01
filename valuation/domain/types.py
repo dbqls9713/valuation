@@ -275,6 +275,67 @@ class FundamentalsSlice:
 
     return cls(ticker=ticker, as_of_date=as_of_date, quarters=quarters)
 
+  @classmethod
+  def from_ticker_panel(cls, ticker_panel: pd.DataFrame,
+                        as_of_date: pd.Timestamp) -> 'FundamentalsSlice':
+    """
+    Construct FundamentalsSlice from pre-filtered ticker panel.
+
+    Args:
+      ticker_panel: Panel already filtered for a single ticker
+      as_of_date: Point-in-time date (only data filed <= this date)
+
+    Returns:
+      FundamentalsSlice with PIT-filtered data
+    """
+    if ticker_panel.empty:
+      raise ValueError('Empty ticker panel')
+
+    ticker = str(ticker_panel['ticker'].iloc[0])
+
+    pit_data = ticker_panel[ticker_panel['filed'] <= as_of_date].copy()
+    if pit_data.empty:
+      raise ValueError(f'No data for {ticker} as of {as_of_date.date()}')
+
+    pit_data = pit_data.sort_values('filed')
+    pit_data = pit_data.groupby(['fiscal_year', 'fiscal_quarter'],
+                                as_index=False).tail(1)
+
+    pit_data = pit_data.sort_values(['fiscal_year', 'fiscal_quarter'])
+
+    quarters: list[QuarterData] = []
+    for _, row in pit_data.iterrows():
+      qd = QuarterData(
+          fiscal_year=int(row['fiscal_year']),
+          fiscal_quarter=str(row['fiscal_quarter']),
+          end=row['end'],
+          filed=row['filed'],
+          cfo_ttm=_safe_float(row.get('cfo_ttm')),
+          capex_ttm=_safe_float(row.get('capex_ttm')),
+          shares=_safe_float(row.get('shares_q')),
+          cfo_q=_safe_float(row.get('cfo_q')),
+          capex_q=_safe_float(row.get('capex_q')),
+      )
+      quarters.append(qd)
+
+    if not quarters:
+      raise ValueError(f'No valid quarters for {ticker} as of {as_of_date}')
+
+    latest = quarters[-1]
+    missing = []
+    if latest.cfo_ttm is None:
+      missing.append('cfo_ttm')
+    if latest.capex_ttm is None:
+      missing.append('capex_ttm')
+    if latest.shares is None:
+      missing.append('shares')
+    if missing:
+      raise ValueError(
+          f'{ticker}: Missing required data as of {as_of_date.date()}: '
+          f'{', '.join(missing)}')
+
+    return cls(ticker=ticker, as_of_date=as_of_date, quarters=quarters)
+
 
 def _safe_float(val: Any) -> Optional[float]:
   """Convert value to float, returning None if NA or invalid."""

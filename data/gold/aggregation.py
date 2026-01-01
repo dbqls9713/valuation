@@ -176,6 +176,44 @@ class TTMCalculator:
 
     return result
 
+  def _calculate_group_ttm(self, group: pd.DataFrame) -> pd.Series:
+    """Calculate TTM for a single (cik10, metric) group."""
+    sorted_group = group.sort_values('filed')
+    original_indices = sorted_group.index.tolist()
+
+    quarter_history: dict[tuple[int, str], list[tuple[pd.Timestamp,
+                                                      float]]] = {}
+    ttm_values = []
+
+    for _, row in sorted_group.iterrows():
+      filed = row['filed']
+      fy = row['fiscal_year']
+      fq = row['fiscal_quarter']
+      q_val = row['q_val']
+
+      key = (fy, fq)
+      if key not in quarter_history:
+        quarter_history[key] = []
+      quarter_history[key].append((filed, q_val))
+
+      target_quarters = self._get_prior_quarters(fy, fq)
+
+      q_vals = []
+      for t_fy, t_fq in target_quarters:
+        t_key = (t_fy, t_fq)
+        if t_key in quarter_history:
+          valid_vals = [(f, v) for f, v in quarter_history[t_key] if f <= filed]
+          if valid_vals:
+            _, latest_val = max(valid_vals, key=lambda x: x[0])
+            q_vals.append(latest_val)
+
+      if len(q_vals) == 4 and all(pd.notna(v) for v in q_vals):
+        ttm_values.append(sum(q_vals))
+      else:
+        ttm_values.append(float('nan'))
+
+    return pd.Series(ttm_values, index=original_indices, dtype='Float64')
+
   def calculate(self, quarterly: pd.DataFrame) -> pd.DataFrame:
     """
     Add TTM column to quarterly data.
@@ -193,38 +231,18 @@ class TTMCalculator:
     result = quarterly.copy()
     result = result.sort_values(
         ['cik10', 'metric', 'fiscal_year', 'fiscal_quarter', 'filed'])
+    result = result.reset_index(drop=True)
 
-    ttm_values = []
+    ttm_series_list = []
+    for _, group in result.groupby(['cik10', 'metric'], sort=False):
+      group_ttm = self._calculate_group_ttm(group)
+      ttm_series_list.append(group_ttm)
 
-    for _, row in result.iterrows():
-      cik10 = row['cik10']
-      metric = row['metric']
-      filed = row['filed']
-      fy = row['fiscal_year']
-      fq = row['fiscal_quarter']
+    if ttm_series_list:
+      result['ttm_val'] = pd.concat(ttm_series_list).sort_index()
+    else:
+      result['ttm_val'] = pd.NA
 
-      target_quarters = self._get_prior_quarters(fy, fq)
-
-      q_vals = []
-      for t_fy, t_fq in target_quarters:
-        candidates = result[(result['cik10'] == cik10) &
-                            (result['metric'] == metric) &
-                            (result['fiscal_year'] == t_fy) &
-                            (result['fiscal_quarter'] == t_fq) &
-                            (result['filed'] <= filed)]
-
-        if not candidates.empty:
-          latest = candidates.sort_values('filed').iloc[-1]
-          q_vals.append(latest['q_val'])
-
-      if len(q_vals) == 4 and all(pd.notna(v) for v in q_vals):
-        ttm = sum(q_vals)
-      else:
-        ttm = pd.NA
-
-      ttm_values.append(ttm)
-
-    result['ttm_val'] = pd.array(ttm_values, dtype='Float64')
     return result
 
 
