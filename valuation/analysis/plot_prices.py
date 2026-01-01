@@ -24,21 +24,30 @@ Usage:
 """
 
 import argparse
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import logging
 from pathlib import Path
 from typing import Any, Optional
 
-import matplotlib.pyplot as plt
-import pandas as pd
+import matplotlib
 
+matplotlib.use('Agg')
+from matplotlib.figure import Figure  # pylint: disable=wrong-import-position
+import matplotlib.pyplot as plt  # pylint: disable=wrong-import-position
+import pandas as pd  # pylint: disable=wrong-import-position
+
+# pylint: disable=wrong-import-position
 from valuation.data_loader import ValuationDataLoader
 from valuation.domain.types import FundamentalsSlice
 from valuation.engine.dcf import compute_intrinsic_value
 from valuation.run import get_price_after_filing
 from valuation.scenarios.config import ScenarioConfig
 from valuation.scenarios.registry import create_policies
+
+# pylint: enable=wrong-import-position
 
 logger = logging.getLogger(__name__)
 
@@ -357,7 +366,8 @@ def plot_scenario_comparison(
   common_policies, different_policies = find_common_and_different_policies(
       scenarios)
 
-  _, ax = plt.subplots(figsize=(14, 8))
+  fig = Figure(figsize=(14, 8))
+  ax = fig.add_subplot(111)
 
   markers = ['o', 's', '^', 'v', 'D', 'p', '*', 'X', 'P', 'h']
   colors = plt.colormaps['tab10'].colors  # type: ignore[attr-defined]
@@ -427,7 +437,7 @@ def plot_scenario_comparison(
 
   ax.grid(True, alpha=0.3, linestyle='--')
 
-  plt.tight_layout()
+  fig.tight_layout()
 
   scenario_names = '__'.join([s.name for s in scenarios])
   scenario_hash = hashlib.md5(scenario_names.encode()).hexdigest()[:8]
@@ -435,10 +445,8 @@ def plot_scenario_comparison(
 
   filename = f'{ticker}__comparison__{n_scenarios}scenarios_{scenario_hash}.png'
   output_path = output_dir / filename
-  plt.savefig(output_path, dpi=150, bbox_inches='tight')
+  fig.savefig(output_path, dpi=150, bbox_inches='tight')
   logger.info('Saved: %s', output_path)
-
-  plt.close()
 
 
 def main() -> None:
@@ -504,6 +512,10 @@ Examples:
                       type=int,
                       default=3,
                       help='Backtest interval in months (default: 3)')
+  parser.add_argument('--concurrency',
+                      type=int,
+                      default=1,
+                      help='Number of parallel workers (default: 1)')
   parser.add_argument('--verbose',
                       '-v',
                       action='store_true',
@@ -567,8 +579,7 @@ Examples:
   logger.info('Period: %s to %s', args.start_date, args.end_date)
   logger.info('Scenarios: %s', [c.name for c in configs])
 
-  for ticker in tickers:
-    logger.info('Processing %s...', ticker)
+  def process_ticker(ticker: str) -> str:
     plot_scenario_comparison(
         ticker=ticker,
         panel=panel,
@@ -579,6 +590,23 @@ Examples:
         loader=loader,
         month_interval=args.month_interval,
     )
+    return ticker
+
+  if args.concurrency > 1:
+    logger.info('Using %d parallel workers', args.concurrency)
+    with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+      futures = {executor.submit(process_ticker, t): t for t in tickers}
+      for future in as_completed(futures):
+        ticker = futures[future]
+        try:
+          future.result()
+          logger.info('Completed: %s', ticker)
+        except (ValueError, KeyError, OSError) as e:
+          logger.error('Failed %s: %s', ticker, e)
+  else:
+    for ticker in tickers:
+      logger.info('Processing %s...', ticker)
+      process_ticker(ticker)
 
   logger.info('All charts saved to: %s', args.output_dir)
 
