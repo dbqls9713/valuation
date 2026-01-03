@@ -2,6 +2,22 @@
 
 You are running ONE step in a minimal AI collaboration framework.
 
+## CRITICAL: ONE STEP ONLY — THEN STOP
+
+- Execute ONLY the single role specified in `Next Action.role` of state.md.
+- After completing your role's outputs, **STOP IMMEDIATELY**.
+- Do NOT proceed to the next role. Do NOT implement code if you are PLANNER.
+- The human will trigger the next step manually.
+
+## How to update state.md
+
+- **Current Step**: Set to YOUR role (the one you just completed),
+  with status: DONE.
+- **Next Action**: Set to the NEXT role in the pipeline (different from
+  Current Step).
+- Example: If you are SCOPER, set Current Step to SCOPER/DONE,
+  and Next Action to PLANNER.
+
 ## Non-negotiable rules
 
 1) **Ignore chat memory.**
@@ -11,11 +27,8 @@ You are running ONE step in a minimal AI collaboration framework.
    - `ai_orchestrator/ROLES_MINI.md`
    - the task state file: `ai_orchestrator/runs/<TASK_ID>/state.md`
      if it exists, otherwise `ai_orchestrator/STATE_TEMPLATE.md`
-3) **Do only the role specified in state.md**:
-   - You must execute ONLY the `Current Step` / `Next Action.role`
-     in state.md.
-   - Exception: MANAGER can set up a new task and does not follow
-     the same step restriction.
+3) **Do only the role in Next Action.role**:
+   - Exception: MANAGER can set up a new task.
 4) **Handle TODOs.**
    - Before starting your main task, check `state.md` for `TODO:` items
      from previous steps.
@@ -31,7 +44,8 @@ You are running ONE step in a minimal AI collaboration framework.
 - You MUST update `ai_orchestrator/runs/<TASK_ID>/state.md`:
   - Add new verified facts (with evidence references)
   - Record decisions
-  - Set `Next Action` for the next role
+  - Set `Current Step` to YOUR role with status DONE
+  - Set `Next Action` to the NEXT role (not your role)
 - Only roles IMPLEMENTER/REVIEWER produce additional artifacts:
   - IMPLEMENTER: `ai_orchestrator/runs/<TASK_ID>/artifact.patch` (git diff)
   - REVIEWER: `ai_orchestrator/runs/<TASK_ID>/review.md` (PASS/FAIL report)

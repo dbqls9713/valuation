@@ -9,24 +9,25 @@
 - scope_forbidden_paths:
   - ...
 
-## Current Step
-
-- step: MANAGER|SCOPER|PLANNER|IMPLEMENTER|REVIEWER
-- status: READY|DONE|BLOCKED
-
-## Next Action (for the next model)
+## Current Step (the role that was just completed)
 
 - role: MANAGER|SCOPER|PLANNER|IMPLEMENTER|REVIEWER
-- what_to_do: 3-7 bullets
+- status: DONE
+
+## Next Action (for the NEXT model — must differ from Current Step)
+
+- role: MANAGER|SCOPER|PLANNER|IMPLEMENTER|REVIEWER
+- what_to_do:
+  - bullet 1
+  - bullet 2
+  - bullet 3
 - required_outputs:
-  - file path
   - file path
 - exact_commands_to_run (if any):
   - ...
 
 ## Facts (verified only)
 
-- ...
 - ...
 
 ## Decisions
