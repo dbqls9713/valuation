@@ -1,0 +1,81 @@
+name: cli-smoke
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  gemini_cli_smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Gemini CLI
+        run: npm i -g @google/gemini-cli
+        # gemini-cli는 npm 글로벌 설치 또는 npx로 실행 가능 :contentReference[oaicite:3]{index=3}
+
+      - name: Write GCP service account key
+        shell: bash
+        run: |
+          mkdir -p .secrets
+          echo '${{ secrets.GCP_SA_KEY_JSON }}' > .secrets/sa.json
+
+      - name: Gemini CLI (Vertex) smoke test
+        shell: bash
+        env:
+          GOOGLE_GENAI_USE_VERTEXAI: "true"
+          GOOGLE_APPLICATION_CREDENTIALS: "${{ github.workspace }}/.secrets/sa.json"
+          GOOGLE_CLOUD_PROJECT: "${{ secrets.GCP_PROJECT_ID }}"
+          GOOGLE_CLOUD_LOCATION: "${{ secrets.GCP_LOCATION }}"
+        run: |
+          # headless는 --prompt(-p)로 단발 실행 가능 :contentReference[oaicite:4]{index=4}
+          # Vertex 사용 시 env vars 필요 :contentReference[oaicite:5]{index=5}
+          gemini --prompt "Say ok" --output-format json | tee gemini_out.json
+          jq -e '.response | ascii_downcase | contains("ok")' gemini_out.json >/dev/null
+          echo "Gemini CLI OK"
+
+  codex_cli_smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Codex
+        run: npm i -g @openai/codex
+        # 공식 예시에서 npm 글로벌 설치 사용 :contentReference[oaicite:6]{index=6}
+
+      - name: Configure Codex auth (copy auth.json)
+        if: ${{ secrets.CODEX_AUTH_JSON != '' }}
+        shell: bash
+        run: |
+          export CODEX_HOME="${{ github.workspace }}/.codex"
+          mkdir -p "$CODEX_HOME"
+          echo '${{ secrets.CODEX_AUTH_JSON }}' > "$CODEX_HOME/auth.json"
+          echo "CODEX_HOME=$CODEX_HOME" >> $GITHUB_ENV
+        # auth.json은 headless 머신에 복사해도 동작 :contentReference[oaicite:7]{index=7}
+
+      - name: Codex exec smoke test (using cached auth)
+        if: ${{ secrets.CODEX_AUTH_JSON != '' }}
+        shell: bash
+        run: |
+          # codex exec는 비대화형 모드(스크립트/CI) :contentReference[oaicite:8]{index=8}
+          codex exec "Say ok" | tee codex_out.txt
+          grep -iq "ok" codex_out.txt
+          echo "Codex CLI OK"
+
+      - name: Codex exec smoke test (using API key)
+        if: ${{ secrets.CODEX_API_KEY != '' }}
+        shell: bash
+        env:
+          CODEX_API_KEY: "${{ secrets.CODEX_API_KEY }}"
+        run: |
+          # CI에선 CODEX_API_KEY를 secret env로 두는 패턴 :contentReference[oaicite:9]{index=9}
+          codex exec "Say ok" | tee codex_out.txt
+          grep -iq "ok" codex_out.txt
+          echo "Codex CLI OK"
