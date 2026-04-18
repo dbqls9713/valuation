@@ -51,6 +51,7 @@ class ScreeningPanelBuilder(BasePanelBuilder):
       gold_dir: Path,
       min_date: Optional[str] = None,
       markets: Optional[list[str]] = None,
+      preloaded_data=None,
   ):
     schema = PanelSchema(
         name=_SCREENING_SCHEMA_NAME,
@@ -59,7 +60,8 @@ class ScreeningPanelBuilder(BasePanelBuilder):
         primary_key=['ticker', 'end'],
     )
     super().__init__(
-        silver_dir, gold_dir, schema, min_date, markets)
+        silver_dir, gold_dir, schema, min_date, markets,
+        preloaded_data=preloaded_data)
 
   def build(self) -> pd.DataFrame:
     """Build screening panel (US + optionally KR)."""

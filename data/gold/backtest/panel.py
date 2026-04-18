@@ -27,10 +27,11 @@ class BacktestPanelBuilder(BasePanelBuilder):
       gold_dir: Path,
       min_date: Optional[str] = None,
       markets: Optional[list[str]] = None,
+      preloaded_data=None,
   ):
     super().__init__(
         silver_dir, gold_dir, BACKTEST_PANEL_SCHEMA,
-        min_date, markets)
+        min_date, markets, preloaded_data=preloaded_data)
 
   def build(self) -> pd.DataFrame:
     """Build backtest panel with all PIT versions."""

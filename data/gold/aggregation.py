@@ -103,54 +103,45 @@ class YTDToQuarterlyConverter:
     if df_ytd.empty:
       return pd.DataFrame()
 
-    df = df_ytd.copy()
-    df = df.sort_values('filed')
-
-    prev_fp_map = {'Q2': 'Q1', 'Q3': 'Q2', 'FY': 'Q3'}
     fp_to_fq = {'Q1': 'Q1', 'Q2': 'Q2', 'Q3': 'Q3', 'FY': 'Q4'}
+    prev_fp_map = {'Q2': 'Q1', 'Q3': 'Q2', 'FY': 'Q3'}
 
-    out_rows = []
+    df = df_ytd.copy()
+    df['fp'] = df['fp'].astype(str)
+    df['expected_fq'] = df['fp'].map(fp_to_fq)
+    df = df[df['expected_fq'] == df['fiscal_quarter']]
+    if df.empty:
+      return pd.DataFrame()
 
-    for _, row in df.iterrows():
-      fp = str(row['fp'])
-      fiscal_year = row['fiscal_year']
-      filed = row['filed']
-      ytd_val = float(row['val'])
+    df = df.sort_values('filed')
+    df = df.drop_duplicates(
+        subset=['fiscal_year', 'fp'], keep='last')
 
-      expected_fq = fp_to_fq.get(fp)
-      if expected_fq and row.get('fiscal_quarter') != expected_fq:
-        continue
+    df['prev_fp'] = df['fp'].map(prev_fp_map)
+    prev_ytd = (df[['fiscal_year', 'fp', 'val', 'filed']]
+                .rename(columns={'fp': '_join_fp', 'val': '_prev_val',
+                                 'filed': '_prev_filed'}))
 
-      if fp == 'Q1':
-        q_val = ytd_val
-      elif fp in prev_fp_map:
-        prev_q = prev_fp_map[fp]
-        candidates = df[(df['fiscal_year'] == fiscal_year) &
-                        (df['fp'] == prev_q) &
-                        (df['fiscal_quarter'] == prev_q) &
-                        (df['filed'] < filed)]
+    merged = df.merge(
+        prev_ytd,
+        left_on=['fiscal_year', 'prev_fp'],
+        right_on=['fiscal_year', '_join_fp'],
+        how='left',
+    )
 
-        if not candidates.empty:
-          prev_row = candidates.sort_values('filed').iloc[-1]
-          prev_ytd_val = float(prev_row['val'])
-          q_val = ytd_val - prev_ytd_val
-        else:
-          q_val = ytd_val
-      else:
-        continue
+    # PIT: only subtract prev quarter if it was filed before current
+    has_prev = (merged['_prev_val'].notna()
+                & (merged['_prev_filed'] < merged['filed']))
+    merged['q_val'] = merged['val'].astype(float)
+    merged.loc[has_prev, 'q_val'] = (
+        merged.loc[has_prev, 'val'].astype(float)
+        - merged.loc[has_prev, '_prev_val'].astype(float))
 
-      out_rows.append({
-          'end': row['end'],
-          'filed': row['filed'],
-          'fy': row['fy'],
-          'fp': 'Q4' if fp == 'FY' else fp,
-          'fiscal_year': fiscal_year,
-          'fiscal_quarter': expected_fq,
-          'q_val': q_val,
-          'tag': row['tag'],
-      })
+    merged['fp'] = merged['fp'].replace({'FY': 'Q4'})
+    merged['fiscal_quarter'] = merged['expected_fq']
 
-    return pd.DataFrame(out_rows)
+    return merged[['end', 'filed', 'fy', 'fp', 'fiscal_year',
+                    'fiscal_quarter', 'q_val', 'tag']].copy()
 
 
 class TTMCalculator:
