@@ -37,11 +37,11 @@ _DOC_DOWNLOAD_URL = (
 
 _DEFAULT_HISTORY_YEARS = 5
 
-_DOC_TYPE_ANNUAL = '120'
-_DOC_TYPE_QUARTERLY = '130'
-_DOC_TYPE_SEMIANNUAL = '140'
-_TARGET_DOC_TYPES = {_DOC_TYPE_ANNUAL, _DOC_TYPE_QUARTERLY,
-                     _DOC_TYPE_SEMIANNUAL}
+DOC_TYPE_ANNUAL = '120'
+DOC_TYPE_QUARTERLY = '130'
+DOC_TYPE_SEMIANNUAL = '140'
+TARGET_DOC_TYPES = {DOC_TYPE_ANNUAL, DOC_TYPE_QUARTERLY,
+                     DOC_TYPE_SEMIANNUAL}
 
 _CACHE_TTL_EDINET_CODES = 30
 _CACHE_TTL_XBRL = None  # historical filings are immutable
@@ -61,7 +61,7 @@ class EDINETProvider(BronzeProvider):
     self._api_key = api_key
     self._min_interval = min_interval_sec
     self._history_years = history_years
-    self._doc_types = doc_types or _TARGET_DOC_TYPES
+    self._doc_types = doc_types or TARGET_DOC_TYPES
 
   @property
   def name(self) -> str:
@@ -290,12 +290,8 @@ class EDINETProvider(BronzeProvider):
     return fetched
 
 
-def _parse_edinet_codes(csv_path: Path) -> dict[str, str]:
-  """Parse EDINET code CSV: securities_code -> edinet_code."""
-  if not csv_path.exists():
-    return {}
-
-  result: dict[str, str] = {}
+def read_edinet_code_csv(csv_path: Path) -> csv.DictReader:
+  """Read EDINET code CSV handling cp932/utf-8 and metadata header."""
   raw = csv_path.read_bytes()
   for encoding in ('utf-8-sig', 'cp932'):
     try:
@@ -304,14 +300,21 @@ def _parse_edinet_codes(csv_path: Path) -> dict[str, str]:
     except (UnicodeDecodeError, ValueError):
       continue
   else:
-    return {}
+    return csv.DictReader(io.StringIO(''))
 
   lines = text.strip().split('\n')
   if lines and 'ＥＤＩＮＥＴコード' not in lines[0]:
     lines = lines[1:]
-  reader = csv.DictReader(io.StringIO('\n'.join(lines)))
+  return csv.DictReader(io.StringIO('\n'.join(lines)))
 
-  for row in reader:
+
+def _parse_edinet_codes(csv_path: Path) -> dict[str, str]:
+  """Parse EDINET code CSV: securities_code -> edinet_code."""
+  if not csv_path.exists():
+    return {}
+
+  result: dict[str, str] = {}
+  for row in read_edinet_code_csv(csv_path):
     edinet_code = (row.get('EDINET code')
                    or row.get('ＥＤＩＮＥＴコード', '')).strip()
     sec_code = (row.get('Securities code')

@@ -1,12 +1,11 @@
-"""EDINET Silver pipeline — Bronze XBRL to Silver parquet."""
+"""EDINET Silver pipeline — Bronze CSV to Silver parquet."""
 
-import csv
-import io
 import logging
 from pathlib import Path
 
 import pandas as pd
 
+from data.bronze.providers.edinet import read_edinet_code_csv
 from data.silver.core.pipeline import Pipeline
 from data.silver.sources.edinet.extractors import EDINETExtractor
 
@@ -74,22 +73,8 @@ class EDINETPipeline(Pipeline):
       return {}
 
     result: dict[str, dict] = {}
-    raw = csv_path.read_bytes()
-    for encoding in ('utf-8-sig', 'cp932'):
-      try:
-        text = raw.decode(encoding)
-        break
-      except (UnicodeDecodeError, ValueError):
-        continue
-    else:
-      return {}
 
-    lines = text.strip().split('\n')
-    if lines and 'ＥＤＩＮＥＴコード' not in lines[0]:
-      lines = lines[1:]
-    reader = csv.DictReader(io.StringIO('\n'.join(lines)))
-
-    for row in reader:
+    for row in read_edinet_code_csv(csv_path):
       edinet_code = (row.get('EDINET code')
                      or row.get('ＥＤＩＮＥＴコード', '')).strip()
       sec_code = (row.get('Securities code')

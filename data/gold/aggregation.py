@@ -114,28 +114,55 @@ class YTDToQuarterlyConverter:
       return pd.DataFrame()
 
     df = df.sort_values('filed')
+    df['filed'] = pd.to_datetime(df['filed'])
+
+    df['prev_fp'] = df['fp'].map(prev_fp_map)
+
+    # Build prev lookup from ALL filings (pre-dedup) for PIT correctness.
+    # For each current row, find the latest prev-quarter filing
+    # that was filed BEFORE the current row's filed date.
+    prev_pool = (df[df['fp'].isin(prev_fp_map.values())]
+                 [['fiscal_year', 'fp', 'val', 'filed']]
+                 .rename(columns={'fp': 'prev_fp', 'val': '_prev_val',
+                                  'filed': '_prev_filed'})
+                 .sort_values('_prev_filed'))
+
+    needs_prev = df[df['prev_fp'].notna()].sort_values('filed')
+
+    if not needs_prev.empty and not prev_pool.empty:
+      matched = pd.merge_asof(
+          needs_prev,
+          prev_pool,
+          by=['fiscal_year', 'prev_fp'],
+          left_on='filed',
+          right_on='_prev_filed',
+          direction='backward',
+      )
+    else:
+      matched = needs_prev.copy()
+      matched['_prev_val'] = pd.NA
+
+    # Dedup: keep latest filing per (fiscal_year, fp)
     df = df.drop_duplicates(
         subset=['fiscal_year', 'fp'], keep='last')
 
-    df['prev_fp'] = df['fp'].map(prev_fp_map)
-    prev_ytd = (df[['fiscal_year', 'fp', 'val', 'filed']]
-                .rename(columns={'fp': '_join_fp', 'val': '_prev_val',
-                                 'filed': '_prev_filed'}))
+    # Q1 rows don't need subtraction
+    q1_rows = df[df['prev_fp'].isna()].copy()
+    q1_rows['q_val'] = q1_rows['val'].astype(float)
 
-    merged = df.merge(
-        prev_ytd,
-        left_on=['fiscal_year', 'prev_fp'],
-        right_on=['fiscal_year', '_join_fp'],
-        how='left',
-    )
+    # Non-Q1 rows: use matched prev values
+    if not matched.empty:
+      non_q1 = matched.drop_duplicates(
+          subset=['fiscal_year', 'fp'], keep='last').copy()
+      non_q1['q_val'] = non_q1['val'].astype(float)
+      has_prev = non_q1['_prev_val'].notna()
+      non_q1.loc[has_prev, 'q_val'] = (
+          non_q1.loc[has_prev, 'val'].astype(float)
+          - non_q1.loc[has_prev, '_prev_val'].astype(float))
+    else:
+      non_q1 = pd.DataFrame()
 
-    # PIT: only subtract prev quarter if it was filed before current
-    has_prev = (merged['_prev_val'].notna()
-                & (merged['_prev_filed'] < merged['filed']))
-    merged['q_val'] = merged['val'].astype(float)
-    merged.loc[has_prev, 'q_val'] = (
-        merged.loc[has_prev, 'val'].astype(float)
-        - merged.loc[has_prev, '_prev_val'].astype(float))
+    merged = pd.concat([q1_rows, non_q1], ignore_index=True)
 
     merged['fp'] = merged['fp'].replace({'FY': 'Q4'})
     merged['fiscal_quarter'] = merged['expected_fq']

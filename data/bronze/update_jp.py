@@ -4,16 +4,16 @@ import os
 from pathlib import Path
 
 from data.bronze.cache import BronzeCache
-from data.bronze.providers.edinet import _DOC_TYPE_ANNUAL
-from data.bronze.providers.edinet import _DOC_TYPE_QUARTERLY
-from data.bronze.providers.edinet import _DOC_TYPE_SEMIANNUAL
+from data.bronze.providers.edinet import DOC_TYPE_ANNUAL
+from data.bronze.providers.edinet import DOC_TYPE_QUARTERLY
+from data.bronze.providers.edinet import DOC_TYPE_SEMIANNUAL
 from data.bronze.providers.edinet import EDINETProvider
 from data.bronze.providers.stooq import StooqProvider
 
 _DOC_TYPE_CHOICES = {
-    'annual': _DOC_TYPE_ANNUAL,
-    'quarterly': _DOC_TYPE_QUARTERLY,
-    'semiannual': _DOC_TYPE_SEMIANNUAL,
+    'annual': DOC_TYPE_ANNUAL,
+    'quarterly': DOC_TYPE_QUARTERLY,
+    'semiannual': DOC_TYPE_SEMIANNUAL,
 }
 
 

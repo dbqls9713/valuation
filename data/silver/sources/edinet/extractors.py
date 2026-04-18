@@ -12,16 +12,11 @@ from data.silver.config.metric_specs_jp import METRIC_SPECS_JP
 
 logger = logging.getLogger(__name__)
 
-_CONTEXT_CURRENT_YEAR = 'CurrentYearDuration'
-_CONTEXT_CURRENT_INSTANT = 'CurrentYearInstant'
-_CURRENT_CONTEXTS = {_CONTEXT_CURRENT_YEAR, _CONTEXT_CURRENT_INSTANT,
-                     'CurrentYearDuration_NonConsolidatedMember',
-                     'CurrentYearInstant_NonConsolidatedMember'}
-
 _SEGMENT_KEYWORDS = (
     'ReportableSegmentMember',
     'EliminationMember',
     'OtherReportableSegmentsMember',
+    'NonConsolidatedMember',
 )
 
 
@@ -110,9 +105,6 @@ class EDINETExtractor:
       except ValueError:
         continue
 
-      is_current = any(ctx in context_id
-                       for ctx in ('CurrentYear', 'CurrentQuarter'))
-
       dedup_key = f'{metric_name}:{context_id}'
       if dedup_key in seen:
         continue
@@ -129,7 +121,6 @@ class EDINETExtractor:
           'end': None,
           'context_ref': context_id,
           'period_type': period_type,
-          'is_current': is_current,
       })
 
     return facts
