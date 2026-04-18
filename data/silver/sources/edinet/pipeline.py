@@ -74,12 +74,24 @@ class EDINETPipeline(Pipeline):
       return {}
 
     result: dict[str, dict] = {}
-    text = csv_path.read_bytes().decode('utf-8-sig')
-    reader = csv.DictReader(io.StringIO(text))
+    raw = csv_path.read_bytes()
+    for encoding in ('utf-8-sig', 'cp932'):
+      try:
+        text = raw.decode(encoding)
+        break
+      except (UnicodeDecodeError, ValueError):
+        continue
+    else:
+      return {}
+
+    lines = text.strip().split('\n')
+    if lines and 'ＥＤＩＮＥＴコード' not in lines[0]:
+      lines = lines[1:]
+    reader = csv.DictReader(io.StringIO('\n'.join(lines)))
 
     for row in reader:
       edinet_code = (row.get('EDINET code')
-                     or row.get('EDINETコード', '')).strip()
+                     or row.get('ＥＤＩＮＥＴコード', '')).strip()
       sec_code = (row.get('Securities code')
                   or row.get('証券コード', '')).strip()
       name = (row.get('Submitter name')
@@ -130,8 +142,8 @@ class EDINETPipeline(Pipeline):
       df['cik10'] = ticker
 
       if period_end:
-        df['end'] = pd.to_datetime(df['end'])
         end_ts = pd.Timestamp(period_end)
+        df['end'] = end_ts
         year = end_ts.year
         month = end_ts.month
 

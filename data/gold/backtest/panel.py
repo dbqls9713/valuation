@@ -44,8 +44,11 @@ class BacktestPanelBuilder(BasePanelBuilder):
     metrics_wide = builder.merge_extra_metrics(
         metrics_q, metrics_wide)
 
+    merge_cols = ['cik10', 'ticker']
+    if 'market' in companies.columns:
+      merge_cols.append('market')
     metrics_wide = metrics_wide.merge(
-        companies[['cik10', 'ticker']],
+        companies[merge_cols],
         on='cik10',
         how='left',
     )

@@ -82,8 +82,11 @@ class ScreeningPanelBuilder(BasePanelBuilder):
     wide = self._pivot_to_wide(metrics_q)
 
     # Join with company tickers.
+    merge_cols = ['cik10', 'ticker']
+    if 'market' in companies.columns:
+      merge_cols.append('market')
     wide = wide.merge(
-        companies[['cik10', 'ticker']],
+        companies[merge_cols],
         on='cik10', how='left',
     )
     wide = wide.dropna(subset=['ticker'])
