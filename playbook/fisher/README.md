@@ -11,14 +11,14 @@
 | 3 | `PIPELINE.md` | Sensing→Shallow→Deep→숙성기→편입→유지보수 뼈대 | 전체 프로세스 파악, 단계 연결 확인 |
 | 4 | `../SHALLOW_DIVE.md` ⭐ | **통합 Shallow Dive playbook** (Buffett+Fisher 공통) | Shallow 실행할 때 |
 | ~~4'~~ | ~~`SHALLOW_DIVE.md`~~ | ~~Fisher 전용 Shallow~~ — **2026-04-18 DEPRECATED**, legacy 참조용 | 기존 ONON/IDXX shallow 해석 시만 |
-| 5 | `DEEP_DIVE.md` | Deep 단계 실행 playbook (Stream A~F) | Fisher형 배정 종목 Deep 실행할 때 |
+| 5 | `../DEEP_DIVE.md` ⭐ | **통합 Deep Dive playbook** (8 Stream 분할 — `../deep-dive/0X_*.md`) | Buffett·Fisher형 배정 종목 모두 Deep 실행할 때 |
 
 ## AI 세션 진입점
 
 - **전체 맥락 필요**: `README.md` → `PHILOSOPHY.md` → `PIPELINE.md` 순 로드
 - **Shallow 실행**: `../SHALLOW_DIVE.md` (통합) + `PHILOSOPHY.md`(필요시) + 해당 기업 Sensing 엔트리. Phase 10 Track Gate에서 Fisher형 배정 시만 본 디렉토리의 Deep playbook 진입
-- **Deep 실행 (Fisher형 배정 종목)**: `PHILOSOPHY.md` + `DEEP_DIVE.md` + 해당 기업 Shallow 리포트
-- **Deep의 특정 Stream만**: `DEEP_DIVE.md` 해당 Stream 섹션 + 선행 Stream 출력물
+- **Deep 실행 (Fisher형 배정 종목)**: `PHILOSOPHY.md` + `../DEEP_DIVE.md` (통합 메타) + 해당 기업 Shallow 리포트
+- **Deep의 특정 Stream만**: `../deep-dive/0X_*.md` 단일 Stream 파일 + 선행 Stream 출력물
 
 ## 전체 파이프라인 한눈에
 

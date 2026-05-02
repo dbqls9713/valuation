@@ -1,6 +1,6 @@
 # 피셔 트랙 파이프라인 — Sensing에서 유지보수까지
 
-피셔 트랙의 **운영 프로세스** 뼈대. 철학은 `PHILOSOPHY.md`, 각 단계의 실행 규칙은 `SHALLOW_DIVE.md`·`DEEP_DIVE.md`에 있고, 이 문서는 **단계 간 연결·원칙·산출물 경로**를 규정한다.
+피셔 트랙의 **운영 프로세스** 뼈대. 철학은 `PHILOSOPHY.md`, 각 단계의 실행 규칙은 `../SHALLOW_DIVE.md`(통합)·`../DEEP_DIVE.md`(통합) + `../deep-dive/0X_*.md`에 있고, 이 문서는 **단계 간 연결·원칙·산출물 경로**를 규정한다.
 
 ---
 
@@ -93,10 +93,11 @@ Stream은 **독립 실행 가능하도록 설계** — AI 호출 시 "Stream B�
 
 **산출물**:
 
-- 본문 (A~E): `../../research/fisher/deep-dive/{ticker}_{name}.md`
-- 모니터링(F): `../../research/fisher/deep-dive/{ticker}_monitoring.md`
+- 본문 (Stream 1-6): `../../research/fisher/deep-dive/{ticker}_{name}.md`
+- 숙성기(Stream 7) 캘린더: `../../research/fisher/deep-dive/{ticker}_maturation.md`
+- 모니터링(Stream 8): `../../research/fisher/deep-dive/{ticker}_monitoring.md`
 
-**실행 상세**: `DEEP_DIVE.md`
+**실행 상세**: `../DEEP_DIVE.md` (통합 메타) + `../deep-dive/0X_*.md` 8 Stream
 
 ---
 
@@ -122,7 +123,7 @@ Stream은 **독립 실행 가능하도록 설계** — AI 호출 시 "Stream B�
 - 워치리스트 강등
 - 탈락
 
-**실행 상세**: `DEEP_DIVE.md` Stream E
+**실행 상세**: `../deep-dive/07_maturation.md` (Stream 7)
 
 ---
 
@@ -152,7 +153,7 @@ Stream은 **독립 실행 가능하도록 설계** — AI 호출 시 "Stream B�
 
 **산출물**: `../../research/fisher/deep-dive/{ticker}_monitoring.md`
 
-**실행 상세**: `DEEP_DIVE.md` Stream F
+**실행 상세**: `../deep-dive/08_monitoring.md` (Stream 8)
 
 ---
 
