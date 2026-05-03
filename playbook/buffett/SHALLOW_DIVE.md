@@ -4,7 +4,9 @@
 >
 > 신규 Shallow Dive는 통합 playbook **[../SHALLOW_DIVE.md](../SHALLOW_DIVE.md)** 를 사용하세요. 신규 통합 프로토콜은 Phase 10에 **Track Assignment Gate**를 두어 Buffett형/Fisher형을 객관 4축으로 배정합니다.
 >
-> 본 파일은 **legacy 참조용으로 보존** — 기존 `research/buffett/shallow-dive/*.md` 산출물(BBWI 등)의 해석과 Buffett 트랙 Deep Dive(`playbook/buffett/DEEP_DIVE.md`) 구조 이해에 활용.
+> 본 파일은 **legacy 참조용으로 보존** — 기존 `research/buffett/shallow-dive/*.md` 산출물(BBWI 등)의 해석에 활용.
+>
+> **Deep Dive도 2026-04-30 통합됨**: 신규 Deep Dive는 통합 playbook **[../DEEP_DIVE.md](../DEEP_DIVE.md)** + `playbook/deep-dive/0X_*.md` 8 Stream 사용. 기존 `playbook/buffett/DEEP_DIVE.md`는 통합 시 삭제됨 (git history로 복원 가능). 트랙 specific 철학은 `PHILOSOPHY.md`로 분리 유지.
 >
 > 신규 Shallow 산출물은 `research/shallow-dive/` 디렉토리에 작성.
 

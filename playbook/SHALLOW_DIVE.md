@@ -655,16 +655,21 @@ scenario_cagr_weighted: 0.07    # Fisher 배정 시 (확률가중 CAGR)
 
 ## 트랙 배정 후 Deep 진입
 
-배정된 트랙의 Deep playbook 호출:
+배정된 트랙으로 **통합 Deep Dive playbook** 호출 (2026-04-30 통합):
 
-- **Buffett형 → `playbook/buffett/DEEP_DIVE.md`** (DCF 3시나리오 중심, 해자 건강도·경영진·위기 대응 심화)
-- **Fisher형 → `playbook/fisher/DEEP_DIVE.md`** (Stream A~F, 경영진 형용사 누적·10년 CAGR·숙성기)
+- **Buffett형 / Fisher형 / 미정 모두 → `playbook/DEEP_DIVE.md`** (8 Stream 분할 구조)
+  - 트랙 배정은 본 Phase 9 결과를 인계
+  - 트랙별 분기는 통합 playbook 내 Stream 4 (가격 평가)·Stream 6 (편입 결정)·Stream 8 (모니터링) 등에 명시
 - **미정** → Deep 보류. 추가 Shallow 라운드에서 축 재평가 or Parking
 
 산출물 위치:
 
-- Deep 본문: `../research/{buffett|fisher}/deep-dive/{TICKER}_{name}.md`
-- Monitoring (Fisher Stream F): `../research/fisher/deep-dive/{TICKER}_monitoring.md`
+- Deep 본문: `../research/{buffett|fisher}/deep-dive/{TICKER}_{name}.md` (트랙 디렉토리 분리는 PR 4에서 통합 vs 유지 결정)
+- 숙성기 캘린더 (Stream 7 라이브): `../research/{buffett|fisher}/deep-dive/{TICKER}_maturation.md`
+- Monitoring (Stream 8 분기 라이브): `../research/{buffett|fisher}/deep-dive/{TICKER}_monitoring.md`
+- Anchoring 차단 사본 (PR 2): `../research/{buffett|fisher}/deep-dive/{TICKER}_shallow_locked.md`
+
+**Legacy**: `playbook/{buffett,fisher}/DEEP_DIVE.md` 두 파일은 통합 시 삭제됨. 기존 산출물 (ADBE, IDXX, ONON 등)의 Section/Stream 표기는 legacy로 유지.
 
 ---
 

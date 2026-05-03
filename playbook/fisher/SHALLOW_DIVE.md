@@ -4,7 +4,9 @@
 >
 > 신규 Shallow Dive는 통합 playbook **[../SHALLOW_DIVE.md](../SHALLOW_DIVE.md)** 를 사용하세요. 통합 프로토콜은 본 Fisher Shallow의 유니버스 게이트·배치 모드·정량 5개 판정을 계승하며, Phase 10에 **Track Assignment Gate**를 신설해 Buffett형/Fisher형을 객관 4축으로 배정합니다.
 >
-> 본 파일은 **legacy 참조용으로 보존** — 기존 `research/fisher/shallow-dive/*.md` 산출물(ONON, IDXX) 해석과 Fisher Deep Dive Stream A~F와의 연속성 이해에 활용.
+> 본 파일은 **legacy 참조용으로 보존** — 기존 `research/fisher/shallow-dive/*.md` 산출물(ONON, IDXX) 해석에 활용.
+>
+> **Deep Dive도 2026-04-30 통합됨**: 신규 Deep Dive는 통합 playbook **[../DEEP_DIVE.md](../DEEP_DIVE.md)** + `playbook/deep-dive/0X_*.md` 8 Stream 사용. 기존 `playbook/fisher/DEEP_DIVE.md`는 통합 시 삭제됨 (git history로 복원 가능). 트랙 specific 철학·파이프라인은 `PHILOSOPHY.md`·`PIPELINE.md`·`EXPLORATION_PIPELINE.md`·`GROWTH_INVESTING_DISCUSSION.md`로 분리 유지.
 >
 > 신규 Shallow 산출물은 `../research/shallow-dive/` 디렉토리에 작성.
 
